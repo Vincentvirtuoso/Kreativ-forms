@@ -9,7 +9,7 @@ export function UIProvider({ children }: { children: React.ReactNode }) {
       theme={kreativFormsTheme}
       background="rgb(var(--kui-background, 255 255 255))"
       textColor="rgb(var(--kui-text, 0 0 0))"
-      defaultMode="system"
+      defaultMode="dark"
       className="min-h-screen"
     >
       <PersistMode storageKey="kui-theme-mode" />
