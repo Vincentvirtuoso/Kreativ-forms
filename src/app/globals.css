@@ -1,0 +1,91 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-background: rgb(var(--kui-background));
+  --color-surface: rgb(var(--kui-surface));
+  --color-surface-raised: rgb(var(--kui-surface-raised));
+  --color-surface-sunken: rgb(var(--kui-surface-sunken));
+  --color-surface-muted: rgb(var(--kui-surface-muted));
+
+  --color-border: rgb(var(--kui-border));
+  --color-text: rgb(var(--kui-text));
+  --color-text-muted: rgb(var(--kui-text-muted));
+
+  --color-brand: rgb(var(--kui-brand));
+  --color-brand-hover: rgb(var(--kui-brand-hover));
+  --color-brand-fg: rgb(var(--kui-brand-fg));
+
+  --color-destructive: rgb(var(--kui-destructive));
+  --color-destructive-hover: rgb(var(--kui-destructive-hover));
+  --color-success: rgb(var(--kui-success));
+  --color-warning: rgb(var(--kui-warning));
+  --color-info: rgb(var(--kui-info));
+
+  --spacing-1: var(--kui-spacing-1);
+  --spacing-2: var(--kui-spacing-2);
+  --spacing-3: var(--kui-spacing-3);
+  --spacing-4: var(--kui-spacing-4);
+  --spacing-5: var(--kui-spacing-5);
+  --spacing-6: var(--kui-spacing-6);
+  --spacing-8: var(--kui-spacing-8);
+  --spacing-10: var(--kui-spacing-10);
+  --spacing-12: var(--kui-spacing-12);
+
+  --radius-sm: var(--kui-radii-sm);
+  --radius-md: var(--kui-radii-md);
+  --radius-lg: var(--kui-radii-lg);
+  --radius-xl: var(--kui-radii-xl);
+  --radius-full: var(--kui-radii-full);
+
+  --font-sans: var(--kui-fonts-sans);
+  --font-body: var(--kui-fonts-body);
+  --font-heading: var(--kui-fonts-heading);
+  --font-mono: var(--kui-fonts-mono);
+
+  --text-xs: var(--kui-font-sizes-xs);
+  --text-sm: var(--kui-font-sizes-sm);
+  --text-md: var(--kui-font-sizes-md);
+  --text-lg: var(--kui-font-sizes-lg);
+  --text-xl: var(--kui-font-sizes-xl);
+  --text-2xl: var(--kui-font-sizes-2xl);
+
+  --font-weight-normal: var(--kui-font-weights-normal);
+  --font-weight-medium: var(--kui-font-weights-medium);
+  --font-weight-semibold: var(--kui-font-weights-semibold);
+  --font-weight-bold: var(--kui-font-weights-bold);
+
+  --animate-fade-in: var(--kui-animations-fade-in);
+  --animate-slide-up: var(--kui-animations-slide-up);
+  --animate-scale-in: var(--kui-animations-scale-in);
+}
+
+@utility kui-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--kui-text-muted) / 0.45) transparent;
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: rgb(var(--kui-text-muted) / 0.45);
+    border-radius: 999px;
+  }
+  &::-webkit-scrollbar-thumb:hover {
+    background: rgb(var(--kui-text-muted) / 0.65);
+  }
+  &:hover {
+    scrollbar-color: rgb(var(--kui-text-muted) / 0.65) transparent;
+  }
+}
+
+@layer base {
+  * {
+    @apply box-border kui-scrollbar;
+  }
+  html {
+    background: rgb(var(--kui-background));
+  }
+  body {
+    margin: 0;
+  }
+}
