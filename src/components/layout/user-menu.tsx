@@ -132,6 +132,7 @@ export default function UserMenu({
               <Switch
                 onCheckedChange={() => setMode(isDark ? "light" : "dark")}
                 size="md"
+                checked={isDark}
               />
             </div>
           </div>

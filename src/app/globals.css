@@ -1,26 +1,29 @@
 @import "tailwindcss";
-
+@source "../../node_modules/@kreativ/ui/dist";
 @theme inline {
-  --color-background: rgb(var(--kui-background));
-  --color-surface: rgb(var(--kui-surface));
-  --color-surface-raised: rgb(var(--kui-surface-raised));
-  --color-surface-sunken: rgb(var(--kui-surface-sunken));
-  --color-surface-muted: rgb(var(--kui-surface-muted));
+  /* Semantic colors */
+  --color-background: rgb(var(--kui-colors-background));
+  --color-foreground: rgb(var(--kui-colors-foreground));
+  --color-surface: rgb(var(--kui-colors-surface));
+  --color-surface-raised: rgb(var(--kui-colors-surface-raised));
+  --color-surface-sunken: rgb(var(--kui-colors-surface-sunken));
+  --color-surface-muted: rgb(var(--kui-colors-surface-muted));
 
-  --color-border: rgb(var(--kui-border));
-  --color-text: rgb(var(--kui-text));
-  --color-text-muted: rgb(var(--kui-text-muted));
+  --color-border: rgb(var(--kui-colors-border));
+  --color-text: rgb(var(--kui-colors-text));
+  --color-text-muted: rgb(var(--kui-colors-text-muted));
 
-  --color-brand: rgb(var(--kui-brand));
-  --color-brand-hover: rgb(var(--kui-brand-hover));
-  --color-brand-fg: rgb(var(--kui-brand-fg));
+  --color-brand: rgb(var(--kui-colors-brand));
+  --color-brand-hover: rgb(var(--kui-colors-brand-hover));
+  --color-brand-fg: rgb(var(--kui-colors-brand-fg));
 
-  --color-destructive: rgb(var(--kui-destructive));
-  --color-destructive-hover: rgb(var(--kui-destructive-hover));
-  --color-success: rgb(var(--kui-success));
-  --color-warning: rgb(var(--kui-warning));
-  --color-info: rgb(var(--kui-info));
+  --color-destructive: rgb(var(--kui-colors-destructive));
+  --color-destructive-hover: rgb(var(--kui-colors-destructive-hover));
+  --color-success: rgb(var(--kui-colors-success));
+  --color-warning: rgb(var(--kui-colors-warning));
+  --color-info: rgb(var(--kui-colors-info));
 
+  /* Spacing */
   --spacing-1: var(--kui-spacing-1);
   --spacing-2: var(--kui-spacing-2);
   --spacing-3: var(--kui-spacing-3);
@@ -31,12 +34,14 @@
   --spacing-10: var(--kui-spacing-10);
   --spacing-12: var(--kui-spacing-12);
 
+  /* Radii */
   --radius-sm: var(--kui-radii-sm);
   --radius-md: var(--kui-radii-md);
   --radius-lg: var(--kui-radii-lg);
   --radius-xl: var(--kui-radii-xl);
   --radius-full: var(--kui-radii-full);
 
+  /* Typography */
   --font-sans: var(--kui-fonts-sans);
   --font-body: var(--kui-fonts-body);
   --font-heading: var(--kui-fonts-heading);
@@ -54,38 +59,61 @@
   --font-weight-semibold: var(--kui-font-weights-semibold);
   --font-weight-bold: var(--kui-font-weights-bold);
 
+  /* Animations */
   --animate-fade-in: var(--kui-animations-fade-in);
   --animate-slide-up: var(--kui-animations-slide-up);
   --animate-scale-in: var(--kui-animations-scale-in);
 }
 
+@layer base {
+  *,
+  *::before,
+  *::after {
+    @apply box-border kui-scrollbar;
+  }
+
+  html {
+    background: rgb(var(--kui-colors-background, 255 255 255));
+  }
+
+  body {
+    margin: 0;
+  }
+}
+
+@utility kui-page-x {
+  --_x: var(--kui-spacing-4, 1rem);
+  padding-inline: var(--_x);
+
+  @media (width >= 40rem) {
+    --_x: var(--kui-spacing-6, 1.5rem);
+  }
+  @media (width >= 48rem) {
+    --_x: var(--kui-spacing-8, 2rem);
+  }
+  @media (width >= 64rem) {
+    --_x: var(--kui-spacing-10, 2.5rem);
+  }
+  @media (width >= 80rem) {
+    --_x: var(--kui-spacing-12, 3rem);
+  }
+}
+
 @utility kui-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: rgb(var(--kui-text-muted) / 0.45) transparent;
+  scrollbar-color: rgb(var(--kui-colors-text-muted) / 0.45) transparent;
 
   &::-webkit-scrollbar-track {
     background: transparent;
   }
   &::-webkit-scrollbar-thumb {
-    background: rgb(var(--kui-text-muted) / 0.45);
+    background: rgb(var(--kui-colors-text-muted) / 0.45);
     border-radius: 999px;
   }
   &::-webkit-scrollbar-thumb:hover {
-    background: rgb(var(--kui-text-muted) / 0.65);
+    background: rgb(var(--kui-colors-text-muted) / 0.65);
   }
   &:hover {
-    scrollbar-color: rgb(var(--kui-text-muted) / 0.65) transparent;
-  }
-}
-
-@layer base {
-  * {
-    @apply box-border kui-scrollbar;
-  }
-  html {
-    background: rgb(var(--kui-background));
-  }
-  body {
-    margin: 0;
+    scrollbar-color: rgb(var(--kui-colors-text-muted) / 0.65) transparent;
   }
 }

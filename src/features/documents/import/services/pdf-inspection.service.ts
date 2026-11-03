@@ -1,5 +1,5 @@
-import * as pdfjsLib from "pdfjs-dist";
 
+import { pdfjsLib } from "@/engines/pdf/pdfjs.client";
 import { DocumentImportError } from "../domain/import.errors";
 
 import { throwIfImportAborted } from "../domain/import.rules";

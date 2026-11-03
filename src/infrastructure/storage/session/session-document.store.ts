@@ -1,3 +1,4 @@
+import { SessionAnnotationRepository } from "./session-annotation.repository";
 import { SessionAssetRepository } from "./session-asset.repository";
 import { SessionDocumentCreationRepository } from "./session-document-creation.repository";
 import { SessionDocumentRepository } from "./session-document.repository";
@@ -8,6 +9,7 @@ export class SessionDocumentStore {
   readonly assets = new SessionAssetRepository();
   readonly pages = new SessionPageRepository();
   readonly creation = new SessionDocumentCreationRepository();
+  readonly annotations = new SessionAnnotationRepository();
 }
 
 export const sessionDocumentStore = new SessionDocumentStore();

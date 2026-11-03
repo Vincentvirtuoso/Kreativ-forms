@@ -40,6 +40,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      className="kui-scrollbar"
       style={
         {
           "--font-body": bodyFont.style.fontFamily,

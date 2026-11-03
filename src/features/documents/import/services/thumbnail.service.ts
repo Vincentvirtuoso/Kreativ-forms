@@ -1,88 +1,105 @@
-import * as pdfjsLib from "pdfjs-dist";
+import type {
+  PDFDocumentLoadingTask,
+  PDFDocumentProxy,
+} from "pdfjs-dist/types/src/display/api";
 
 import { DocumentImportError } from "../domain/import.errors";
 import { throwIfImportAborted } from "../domain/import.rules";
+import type { ValidatedImportFile } from "../domain/import.types";
+import { pdfjsLib } from "@/engines/pdf/pdfjs.client";
 
-import type { ImportPageMetadata } from "../domain/import.types";
-import { PDFDocumentLoadingTask, PDFDocumentProxy } from "pdfjs-dist/types/src/display/api";
-
-export interface GeneratedThumbnail {
-  pageNumber: number;
-  blob: Blob;
-  width: number;
-  height: number;
-}
+const THUMBNAIL_WIDTH = 320;
+const THUMBNAIL_QUALITY = 0.8;
+const THUMBNAIL_MIME_TYPE = "image/webp";
 
 export class ThumbnailService {
-  private readonly thumbnailWidth = 320;
-  private readonly thumbnailType = "image/webp";
-  private readonly thumbnailQuality = 0.8;
-
   async generate(
-    pdfBlob: Blob,
-    pages: ImportPageMetadata[],
+    input: ValidatedImportFile,
     signal?: AbortSignal,
-  ): Promise<GeneratedThumbnail[]> {
-    if (!pages.length) return [];
+  ): Promise<Blob[]> {
+    if (input.type !== "pdf") {
+      throw new DocumentImportError({
+        code: "INVALID_FILE_TYPE",
+        message: "Thumbnails can only be generated from PDF files.",
+        fileName: input.file.name,
+      });
+    }
+
+    return this.generateFromBlob(
+      new Blob([await input.file.arrayBuffer()], {
+        type: "application/pdf",
+      }),
+      signal,
+    );
+  }
+
+  async generateFromBlob(blob: Blob, signal?: AbortSignal): Promise<Blob[]> {
+    throwIfImportAborted(signal);
 
     let loadingTask: PDFDocumentLoadingTask | undefined;
     let pdf: PDFDocumentProxy | undefined;
-    
+
     try {
-      throwIfImportAborted(signal);
-
-      const data = new Uint8Array(await pdfBlob.arrayBuffer());
-
+      const data = new Uint8Array(await blob.arrayBuffer());
       throwIfImportAborted(signal);
 
       loadingTask = pdfjsLib.getDocument({ data });
-
       pdf = await loadingTask.promise;
 
-      const thumbnails: GeneratedThumbnail[] = [];
+      const thumbnails: Blob[] = [];
 
-      for (let index = 0; index < pages.length; index++) {
+      for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
         throwIfImportAborted(signal);
 
-        const pageNumber = index + 1;
         const page = await pdf.getPage(pageNumber);
+        const baseViewport = page.getViewport({ scale: 1 });
+        const scale = THUMBNAIL_WIDTH / baseViewport.width;
+        const viewport = page.getViewport({ scale });
+
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.ceil(viewport.width);
+        canvas.height = Math.ceil(viewport.height);
+
+        const context = canvas.getContext("2d");
+
+        if (!context) {
+          throw new Error("Unable to create thumbnail canvas.");
+        }
 
         try {
-          const baseViewport = page.getViewport({ scale: 1 });
-          const scale = this.thumbnailWidth / baseViewport.width;
-          const viewport = page.getViewport({ scale });
-
-          const canvas = document.createElement("canvas");
-          const context = canvas.getContext("2d");
-
-          if (!context) {
-            throw new Error("Unable to create thumbnail canvas.");
-          }
-
-          canvas.width = Math.ceil(viewport.width);
-          canvas.height = Math.ceil(viewport.height);
-
-          await page.render({
-            canvas,
+          const renderTask = page.render({
             canvasContext: context,
+            canvas,
             viewport,
-          }).promise;
+          });
+
+          const cancelRender = () => renderTask.cancel();
+          signal?.addEventListener("abort", cancelRender, { once: true });
+
+          try {
+            await renderTask.promise;
+          } finally {
+            signal?.removeEventListener("abort", cancelRender);
+          }
 
           throwIfImportAborted(signal);
 
-          const blob = await this.canvasToBlob(canvas);
-
-          thumbnails.push({
-            pageNumber,
-            blob,
-            width: canvas.width,
-            height: canvas.height,
+          const thumbnail = await new Promise<Blob>((resolve, reject) => {
+            canvas.toBlob(
+              (result) => {
+                if (result) resolve(result);
+                else reject(new Error("Unable to generate page thumbnail."));
+              },
+              THUMBNAIL_MIME_TYPE,
+              THUMBNAIL_QUALITY,
+            );
           });
 
-          canvas.width = 0;
-          canvas.height = 0;
+          thumbnails.push(thumbnail);
         } finally {
           page.cleanup();
+          canvas.width = 0;
+          canvas.height = 0;
         }
       }
 
@@ -96,29 +113,10 @@ export class ThumbnailService {
         });
       }
 
-      if (error instanceof DocumentImportError) throw error;
-
-      throw new DocumentImportError({
-        code: "PDF_PROCESSING_FAILED",
-        message: "Unable to generate document thumbnails.",
-        cause: error,
-      });
+      throw error;
     } finally {
       if (pdf) await pdf.cleanup();
       else if (loadingTask) await loadingTask.destroy();
     }
-  }
-
-  private canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
-    return new Promise((resolve, reject) => {
-      canvas.toBlob(
-        (blob) => {
-          if (blob) resolve(blob);
-          else reject(new Error("Thumbnail encoding failed."));
-        },
-        this.thumbnailType,
-        this.thumbnailQuality,
-      );
-    });
   }
 }

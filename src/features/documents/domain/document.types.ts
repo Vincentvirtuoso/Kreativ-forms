@@ -87,9 +87,9 @@ export interface CreateDocumentInput {
   persistence: DocumentPersistence;
 }
 
-export interface UpdateDocumentInput {
-  name?: string;
-  status?: DocumentStatus;
-  collectionId?: CollectionId | null;
+export type UpdateDocumentInput = Partial<
+  Omit<Document, "id" | "revision" | "createdAt" | "schemaVersion" | "sync">
+> & {
+  collectionId?: string | null;
   completedAt?: string | null;
-}
+};
