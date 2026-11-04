@@ -466,7 +466,7 @@ export function EditorWorkspace({
   const editorSaveStatus = documentSaveFailed ? "error" : saveStatus;
 
   return (
-    <div className="flex h-[calc(100dvh-3.5rem)] min-h-125 flex-col overflow-hidden bg-background text-text">
+    <div className="flex h-[calc(100dvh-7.5rem)] min-h-125 flex-col overflow-hidden bg-background text-text">
       <EditorHeader
         documentName={document.name}
         pageCount={orderedPages.length}

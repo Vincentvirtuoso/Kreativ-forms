@@ -34,7 +34,7 @@ export const AppShell = ({ children }: AppShellProps) => {
           sm:px-8
         "
         >
-          <UserMenu name="Felix Vincent" email="splenddev22@gmail.com" />
+          <UserMenu />
         </header>
 
         <div
@@ -42,7 +42,7 @@ export const AppShell = ({ children }: AppShellProps) => {
           kui-page-x relative flex-1
           pb-10 pt-6
           sm:pb-12 sm:pt-8
-          has-[>[data-kui-full-bleed]]:px-0!
+          has-[>[data-kui-full-bleed]]:px-0! has-[>[data-kui-full-bleed]]:py-0!
         "
         >
           {children}

@@ -23,6 +23,7 @@ import type {
   AnnotationPosition,
   AnnotationUpdate,
 } from "../domain/annotation.types";
+import { Button } from "@splenddev/kreativ-ui";
 
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 3;
@@ -324,29 +325,35 @@ export function PdfDocumentViewer({
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <div className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-surface px-2 sm:px-4 pointer-coarse:h-14">
         <div className="flex items-center gap-1 sm:gap-2">
-          <button
+          <Button
             type="button"
+            size="sm"
+            iconOnly
+            variant="ghost"
+            color="neutral"
             aria-label="Previous page"
             disabled={loading || pageNumber <= 1}
             onClick={() => changePage(-1)}
-            className={iconButton}
           >
             <ChevronLeft size={18} />
-          </button>
+          </Button>
 
           <span className="min-w-16 text-center text-sm tabular-nums sm:min-w-20">
             {pageNumber} / {pageCount}
           </span>
 
-          <button
+          <Button
             type="button"
+            size="sm"
+            iconOnly
+            variant="ghost"
+            color="neutral"
             aria-label="Next page"
             disabled={loading || pageNumber >= pageCount}
             onClick={() => changePage(1)}
-            className={iconButton}
           >
             <ChevronRight size={18} />
-          </button>
+          </Button>
         </div>
 
         <div className="flex items-center gap-1 sm:gap-2">

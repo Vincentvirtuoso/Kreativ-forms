@@ -20,6 +20,7 @@ import {
   ChevronRight,
   ChevronDown,
   FolderClosed,
+  FolderPlus,
 } from "lucide-react";
 
 import Link from "next/link";
@@ -27,44 +28,31 @@ import { usePathname } from "next/navigation";
 
 import { cn } from "@/lib/cn";
 
-const navItems = [
-  { id: "recent", label: "Recent Documents", icon: Clock, href: "/dashboard" },
+interface NavItem {
+  id: string;
+  label: string;
+  icon?: React.ElementType;
+  href: string;
+}
+
+const navItems: NavItem[] = [
+  {
+    id: "recent",
+    label: "Dashboard",
+    icon: Clock,
+    href: "/dashboard",
+  },
   {
     id: "uploaded",
     label: "Uploaded",
     icon: UploadCloud,
-    href: "/dashboard/uploaded",
+    href: "/dashboard?tab=uploaded",
   },
   {
-    id: "templates",
-    label: "Templates",
-    icon: LayoutTemplate,
-    href: "/dashboard/templates",
-  },
-  {
-    id: "signatures",
-    label: "Signatures",
-    icon: PenTool,
-    href: "/dashboard/signatures",
-  },
-  {
-    id: "handwriting",
-    label: "Handwriting Assets",
+    id: "assets",
+    label: "Assets",
     icon: FileSignature,
-    href: "/dashboard/handwriting",
-  },
-];
-
-const collections = [
-  {
-    id: "contracts",
-    label: "Client Contracts",
-    href: "/dashboard/collections/contracts",
-  },
-  {
-    id: "tax",
-    label: "Tax Forms Q2",
-    href: "/dashboard/collections/tax",
+    href: "/dashboard?tab=assets",
   },
 ];
 
@@ -72,14 +60,16 @@ const footerItems = [
   {
     label: "Settings",
     icon: Settings,
-    href: "/dashboard/settings",
+    href: "/dashboard?tab=settings",
   },
   {
     label: "Help & Support",
     icon: HelpCircle,
-    href: "/dashboard/help",
+    href: "/help",
   },
 ];
+
+const collections: NavItem[] = [];
 
 const AnimatedLabel = ({
   show,
@@ -127,11 +117,12 @@ const SidebarContent = ({
   const isActive = (href: string) => {
     if (pathname === href) return true;
 
-    // The dashboard root should not remain active on every dashboard page.
     if (href === "/dashboard") return false;
 
     return pathname.startsWith(`${href}/`);
   };
+
+  const isEmpty = collections.length === 0;
 
   return (
     <>
@@ -142,7 +133,7 @@ const SidebarContent = ({
         )}
       >
         <Link
-          href="/dashboard"
+          href="/"
           onClick={mobile ? onClose : undefined}
           className="flex min-w-0 items-center gap-3"
           aria-label="Kreativ Forms dashboard"
@@ -250,7 +241,9 @@ const SidebarContent = ({
                         compact && !mobile ? "md:justify-center md:px-0" : "",
                       )}
                     >
-                      <item.icon size={18} className="shrink-0" />
+                      {item.icon && (
+                        <item.icon size={18} className="shrink-0" />
+                      )}
 
                       <AnimatedLabel show={!compact}>
                         {item.label}
@@ -262,92 +255,123 @@ const SidebarContent = ({
             </ul>
           </nav>
         </div>
-
-        <div>
-          <div
-            className={cn(
-              "mb-2 flex items-center",
-              compact && !mobile ? "md:hidden" : "justify-between px-3",
-            )}
-          >
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-text-muted">
-              Collections
-            </h2>
-
-            <button
-              type="button"
-              onClick={() => setIsCollectionsOpen((open) => !open)}
-              aria-label={
-                isCollectionsOpen
-                  ? "Collapse collections"
-                  : "Expand collections"
-              }
-              aria-expanded={isCollectionsOpen}
-              className="flex h-6 w-6 items-center justify-center rounded text-text-muted transition-colors hover:bg-surface-raised hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-            >
-              <motion.div
-                animate={{ rotate: isCollectionsOpen ? 0 : -90 }}
-                transition={{ duration: 0.2 }}
-              >
-                <ChevronDown size={14} />
-              </motion.div>
-            </button>
-          </div>
-
+        <nav aria-label="Collections">
           {compact && !mobile && (
             <div className="flex justify-center pb-2">
               <Link
                 href="/dashboard/collections"
-                title="Collections"
-                aria-label="Collections"
-                className="flex h-9 w-9 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-surface-raised hover:text-text"
+                title={isEmpty ? "No collections yet" : "Collections"}
+                aria-label={isEmpty ? "Collections (none yet)" : "Collections"}
+                className="relative flex h-9 w-9 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-surface-raised hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
               >
                 <FolderClosed size={18} />
+
+                {isEmpty && (
+                  <span
+                    aria-hidden
+                    className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-brand"
+                  />
+                )}
               </Link>
             </div>
           )}
 
-          <AnimatePresence initial={false}>
-            {isCollectionsOpen && !compact && (
-              <motion.ul
-                key="collections-list"
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: "auto", opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.25, ease: "easeInOut" }}
-                className="space-y-1 overflow-hidden"
-              >
-                {collections.map((collection) => {
-                  const active = isActive(collection.href);
+          {!compact && (
+            <>
+              <div className="mb-2 flex items-center justify-between px-3">
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-text-muted">
+                  Collections
+                </h2>
 
-                  return (
-                    <li key={collection.id}>
-                      <Link
-                        href={collection.href}
-                        onClick={mobile ? onClose : undefined}
-                        aria-current={active ? "page" : undefined}
-                        className={cn(
-                          "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand",
-                          active
-                            ? "bg-surface-raised font-medium text-text"
-                            : "text-text-muted hover:bg-surface-raised hover:text-text",
-                        )}
-                      >
-                        <div className="flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border border-border bg-surface-sunken">
-                          <div className="h-1.5 w-1.5 rounded-sm bg-text-muted opacity-50" />
-                        </div>
+                <button
+                  type="button"
+                  onClick={() => setIsCollectionsOpen((open) => !open)}
+                  aria-label={
+                    isCollectionsOpen
+                      ? "Collapse collections"
+                      : "Expand collections"
+                  }
+                  aria-expanded={isCollectionsOpen}
+                  aria-controls="collections-list"
+                  disabled={isEmpty}
+                  className="flex h-6 w-6 items-center justify-center rounded text-text-muted transition-colors hover:bg-surface-raised hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:pointer-events-none disabled:opacity-40"
+                >
+                  <motion.div
+                    animate={{ rotate: isCollectionsOpen ? 0 : -90 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <ChevronDown size={14} />
+                  </motion.div>
+                </button>
+              </div>
 
-                        <span className="whitespace-nowrap">
-                          {collection.label}
-                        </span>
-                      </Link>
-                    </li>
-                  );
-                })}
-              </motion.ul>
-            )}
-          </AnimatePresence>
-        </div>
+              <AnimatePresence initial={false} mode="wait">
+                {isEmpty ? (
+                  <motion.div
+                    key="empty"
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.2, ease: "easeInOut" }}
+                    className="overflow-hidden"
+                  >
+                    <div className="mx-3 mb-2 rounded-md border border-dashed border-border/60 px-3 py-3 text-xs text-text-muted">
+                      <div className="flex items-center gap-2">
+                        <FolderClosed
+                          size={14}
+                          className="shrink-0 text-text-muted/70"
+                        />
+                        <span>No collections yet</span>
+                      </div>
+
+                      <p className="mt-1.5 pl-6 text-[11px] leading-4 text-text-muted/70">
+                        Coming soon
+                      </p>
+                    </div>
+                  </motion.div>
+                ) : isCollectionsOpen ? (
+                  <motion.ul
+                    key="list"
+                    id="collections-list"
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.25, ease: "easeInOut" }}
+                    className="space-y-1 overflow-hidden"
+                  >
+                    {collections.map((collection) => {
+                      const active = isActive(collection.href);
+
+                      return (
+                        <li key={collection.id}>
+                          <Link
+                            href={collection.href}
+                            onClick={mobile ? onClose : undefined}
+                            aria-current={active ? "page" : undefined}
+                            className={cn(
+                              "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand",
+                              active
+                                ? "bg-surface-raised font-medium text-text"
+                                : "text-text-muted hover:bg-surface-raised hover:text-text",
+                            )}
+                          >
+                            <div className="flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border border-border bg-surface-sunken">
+                              <div className="h-1.5 w-1.5 rounded-sm bg-text-muted opacity-50" />
+                            </div>
+
+                            <span className="whitespace-nowrap">
+                              {collection.label}
+                            </span>
+                          </Link>
+                        </li>
+                      );
+                    })}
+                  </motion.ul>
+                ) : null}
+              </AnimatePresence>
+            </>
+          )}
+        </nav>
       </div>
 
       <div className="shrink-0 space-y-1 border-t border-border p-3">
@@ -463,7 +487,6 @@ const Sidebar = ({ isCollapsed = false, setIsCollapsed }: SidebarProps) => {
     };
   }, [isMobileOpen]);
 
-  // Close the drawer after route navigation.
   useEffect(() => {
     setIsMobileOpen(false);
   }, [pathname]);
@@ -488,13 +511,12 @@ const Sidebar = ({ isCollapsed = false, setIsCollapsed }: SidebarProps) => {
         <Menu size={20} />
       </button>
 
-      <button
-        type="button"
+      <div
         tabIndex={-1}
         aria-label="Close navigation menu"
         onClick={() => closeMobileSidebar()}
         className={cn(
-          "fixed inset-0 z-40 bg-black/40 backdrop-blur-[2px] transition-opacity duration-300 md:hidden",
+          "fixed inset-0 z-40 bg-black/70 backdrop-blur-[2px] transition-opacity duration-300 md:hidden",
           isMobileOpen
             ? "visible opacity-100"
             : "invisible pointer-events-none opacity-0",
@@ -506,9 +528,8 @@ const Sidebar = ({ isCollapsed = false, setIsCollapsed }: SidebarProps) => {
         id="mobile-sidebar"
         aria-label="Mobile navigation"
         aria-hidden={!isMobileOpen}
-        inert={!isMobileOpen}
         className={cn(
-          "fixed inset-y-0 left-0 z-65 flex h-screen w-[min(280px,85vw)] shrink-0 flex-col border-r border-border/70 bg-surface font-sans transition-transform duration-300 ease-in-out md:hidden",
+          "fixed inset-y-0 left-0 z-65 flex h-screen w-[min(280px,85vw)] shrink-0 flex-col border-r border-border bg-surface font-sans transition-transform duration-300 ease-in-out md:hidden",
           isMobileOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
@@ -523,7 +544,7 @@ const Sidebar = ({ isCollapsed = false, setIsCollapsed }: SidebarProps) => {
       <aside
         aria-label="Desktop navigation"
         className={cn(
-          "sticky top-0 hidden h-screen shrink-0 flex-col border-r border-border/70 bg-surface font-sans transition-[width] duration-300 ease-in-out md:flex",
+          "sticky top-0 hidden h-screen shrink-0 flex-col border-r border-border bg-surface font-sans transition-[width] duration-300 ease-in-out md:flex",
           isCollapsed ? "w-18" : "w-65",
         )}
       >

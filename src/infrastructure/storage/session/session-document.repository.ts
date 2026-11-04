@@ -92,8 +92,20 @@ export class SessionDocumentRepository implements DocumentRepository {
   }
 
   async permanentlyDelete(id: DocumentId): Promise<void> {
-    if (!sessionDocumentState.documents.has(id)) {
+    const current = sessionDocumentState.documents.get(id);
+
+    if (!current) {
       throw new Error("Document not found.");
+    }
+
+    if (!current.deletedAt) {
+      throw new Error("Document must be in trash before permanent deletion.");
+    }
+
+    for (const [annotationId, annotation] of sessionDocumentState.annotations) {
+      if (annotation.documentId === id) {
+        sessionDocumentState.annotations.delete(annotationId);
+      }
     }
 
     for (const [pageId, page] of sessionDocumentState.pages) {

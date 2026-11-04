@@ -11,6 +11,8 @@ import type {
 
 import { useAnnotationStore } from "../stores/useAnnotationStore";
 import { AnnotationBox } from "./annotations/AnnotationBox";
+import { SnapGuides } from "./annotations/SnapGuides";
+import type { ResizeHandle } from "../utils/annotation-geometry";
 import { AnnotationToolbar } from "./annotations/AnnotationToolbar";
 import { SignatureDialog } from "./annotations/SignatureDialog";
 import { useDoubleTap } from "../hooks/useDoubleTap";
@@ -87,6 +89,7 @@ export function AnnotationOverlay({
 
   const {
     preview,
+    guides,
     startDrag,
     handlePointerMove,
     handlePointerUp,
@@ -143,6 +146,7 @@ export function AnnotationOverlay({
     event: React.PointerEvent<HTMLElement>,
     annotation: Annotation,
     mode: "move" | "resize",
+    handle?: ResizeHandle,
   ) {
     if (disabled || event.button !== 0) return;
 
@@ -170,7 +174,7 @@ export function AnnotationOverlay({
       return;
     }
 
-    startDrag(event, annotation, mode);
+    startDrag(event, annotation, mode, handle);
   }
 
   function commitPosition(
@@ -342,8 +346,9 @@ export function AnnotationOverlay({
               selected={annotation.id === selectedId}
               disabled={disabled}
               scale={scale}
-              onPointerDown={(event, mode) =>
-                beginInteraction(event, annotation, mode)
+              dragging={preview?.id === annotation.id ? preview.mode : null}
+              onPointerDown={(event, mode, handle) =>
+                beginInteraction(event, annotation, mode, handle)
               }
               onKeyDown={(event) => handleAnnotationKeyDown(event, annotation)}
               onChange={(value) => handleAnnotationChange(annotation, value)}
@@ -351,6 +356,8 @@ export function AnnotationOverlay({
             />
           );
         })}
+
+        <SnapGuides guides={guides} />
       </div>
 
       {showToolbar &&

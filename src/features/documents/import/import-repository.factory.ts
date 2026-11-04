@@ -1,3 +1,4 @@
+import { dexieDocumentStore } from "@/infrastructure/storage/browser/dexie-document.store";
 import type { DocumentPersistence } from "../domain/document.types";
 import type { DocumentCreationRepository } from "../repositories/document-creation.repository";
 
@@ -6,9 +7,7 @@ import { sessionDocumentStore } from "@/infrastructure/storage/session/session-d
 export function getDocumentCreationRepository(
   persistence: DocumentPersistence,
 ): DocumentCreationRepository {
-  if (persistence === "session") {
-    return sessionDocumentStore.creation;
-  }
-
-  throw new Error("Local document storage is not implemented yet.");
+  return persistence === "session"
+    ? sessionDocumentStore.creation
+    : dexieDocumentStore.creation;
 }

@@ -6,8 +6,12 @@ import type {
   StoredDocumentAsset,
 } from "../../domain/document.types";
 
+import type { Annotation } from "@/features/editor/domain/annotation.types";
+
+import type { SignatureAsset } from "@/features/assets/domain/signature.types";
+
 export const DATABASE_NAME = "kreativ-forms";
-export const DATABASE_VERSION = 1;
+export const DATABASE_VERSION = 2;
 
 export interface SyncOutboxEntry {
   id: string;
@@ -42,6 +46,9 @@ export class KreativFormsDatabase extends Dexie {
   documents!: Table<Document, string>;
   pages!: Table<DocumentPage, string>;
   assets!: Table<StoredDocumentAsset, string>;
+  annotations!: Table<Annotation, string>;
+  signatures!: Table<SignatureAsset, string>;
+
   collections!: Table<CollectionRecord, string>;
   settings!: Table<SettingRecord, string>;
   devices!: Table<DeviceRecord, string>;
@@ -50,7 +57,8 @@ export class KreativFormsDatabase extends Dexie {
   constructor() {
     super(DATABASE_NAME);
 
-    this.version(DATABASE_VERSION).stores({
+    // Original schema. Keep this declaration unchanged.
+    this.version(1).stores({
       documents: [
         "id",
         "status",
@@ -81,7 +89,48 @@ export class KreativFormsDatabase extends Dexie {
       ].join(", "),
     });
 
-    // Allow other tabs to upgrade the database.
+    // Add annotations and reusable signatures.
+    this.version(2).stores({
+      documents: [
+        "id",
+        "status",
+        "persistence",
+        "updatedAt",
+        "deletedAt",
+        "collectionId",
+        "sync.status",
+        "[status+updatedAt]",
+      ].join(", "),
+
+      pages: ["id", "documentId", "[documentId+order]"].join(", "),
+
+      assets: ["id", "documentId", "[documentId+type]"].join(", "),
+
+      annotations: [
+        "id",
+        "documentId",
+        "pageId",
+        "[documentId+pageId]",
+        "updatedAt",
+      ].join(", "),
+
+      signatures: "id, name, createdAt, updatedAt",
+
+      collections: "id, name, updatedAt",
+
+      settings: "key",
+
+      devices: "id, lastActiveAt",
+
+      outbox: [
+        "id",
+        "entityType",
+        "entityId",
+        "createdAt",
+        "[entityType+createdAt]",
+      ].join(", "),
+    });
+
     this.on("versionchange", () => {
       this.close();
     });

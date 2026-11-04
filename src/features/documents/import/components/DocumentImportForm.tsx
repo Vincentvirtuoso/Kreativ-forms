@@ -188,7 +188,7 @@ export function DocumentImportForm() {
       const result = await importService.prepare({
         files,
         options: {
-          persistence: "session",
+          persistence: "local",
           imageMode,
         },
         callbacks: {

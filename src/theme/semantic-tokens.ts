@@ -27,7 +27,7 @@ export const semanticTokens = {
 
     border: {
       light: "{colors.neutral.200}",
-      dark: "{colors.neutral.800}",
+      dark: "{colors.neutral.700}",
     },
 
     surfaceMuted: {

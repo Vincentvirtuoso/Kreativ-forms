@@ -29,21 +29,6 @@ function validate(document: Document): Document {
 }
 
 export class LocalDocumentRepository implements DocumentRepository {
-  // async create(document: Document): Promise<void> {
-  //   const validated = validate(document);
-
-  //   await database.transaction(
-  //     "rw",
-  //     database.documents,
-  //     database.outbox,
-  //     async () => {
-  //       await database.documents.add(validated);
-
-  //       await database.outbox.add(createOutboxEntry(validated, "create"));
-  //     },
-  //   );
-  // }
-
   async getById(id: DocumentId): Promise<Document | null> {
     return (await database.documents.get(id)) ?? null;
   }
@@ -79,7 +64,6 @@ export class LocalDocumentRepository implements DocumentRepository {
           },
         };
 
-        // Explicitly remove optional properties when null is supplied.
         if (collectionId === null) {
           delete next.collectionId;
         } else if (collectionId !== undefined) {
@@ -170,6 +154,7 @@ export class LocalDocumentRepository implements DocumentRepository {
       database.documents,
       database.pages,
       database.assets,
+      database.annotations,
       database.outbox,
       async () => {
         const current = await database.documents.get(id);
@@ -178,12 +163,18 @@ export class LocalDocumentRepository implements DocumentRepository {
           throw new Error("Document not found.");
         }
 
+        if (!current.deletedAt) {
+          throw new Error(
+            "Document must be in trash before permanent deletion.",
+          );
+        }
+
         const revision = current.revision + 1;
         const now = new Date().toISOString();
 
-        // Remove older document-level operations. The final delete
-        // operation supersedes them.
         await database.outbox.where("entityId").equals(id).delete();
+
+        await database.annotations.where("documentId").equals(id).delete();
 
         await database.pages.where("documentId").equals(id).delete();
 
@@ -191,7 +182,6 @@ export class LocalDocumentRepository implements DocumentRepository {
 
         await database.documents.delete(id);
 
-        // Retain a deletion event for future synchronization.
         await database.outbox.add({
           id: crypto.randomUUID(),
           entityType: "document",
@@ -208,7 +198,7 @@ export class LocalDocumentRepository implements DocumentRepository {
       },
     );
   }
-
+  
   async getTrash(): Promise<Document[]> {
     return database.documents
       .filter((document) => Boolean(document.deletedAt))

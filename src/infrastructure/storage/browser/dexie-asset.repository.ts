@@ -1,4 +1,4 @@
-import { database } from "./database";
+import { database } from "@/features/documents/infrastructure/database/database";
 
 import type {
   AssetId,

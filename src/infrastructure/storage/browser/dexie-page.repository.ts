@@ -1,10 +1,10 @@
-import { database } from "./database";
 
 import type {
   DocumentId,
   DocumentPage,
   PageId,
 } from "@/features/documents/domain/document.types";
+import { database } from "@/features/documents/infrastructure/database/database";
 
 import type { PageRepository } from "@/features/documents/repositories/page.repository";
 
