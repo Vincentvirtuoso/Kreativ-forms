@@ -115,12 +115,23 @@ export class DashboardDocumentService {
   }
 
   async permanentlyDelete(id: string): Promise<void> {
-    const { document, repository } = await this.findRepository(id);
+  const [local, session] = await Promise.all([
+    this.localDocuments.getById(id),
+    this.sessionDocuments.getById(id),
+  ]);
 
-    if (!document.deletedAt) {
-      throw new Error("Document must be in trash before permanent deletion.");
-    }
+  const target = local?.deletedAt
+    ? this.localDocuments
+    : session?.deletedAt
+      ? this.sessionDocuments
+      : null;
 
-    await repository.permanentlyDelete(id);
+  if (!target) {
+    throw new Error(
+      "This document could not be found in Trash. Refresh and try again.",
+    );
   }
+
+  await target.permanentlyDelete(id);
+}
 }
