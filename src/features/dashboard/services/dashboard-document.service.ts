@@ -17,17 +17,27 @@ export class DashboardDocumentService {
   ) {}
 
   private async findRepository(id: string) {
-    const local = await this.localDocuments.getById(id);
+  const [local, session] = await Promise.all([
+    this.localDocuments.getById(id),
+    this.sessionDocuments.getById(id),
+  ]);
 
-    if (local) return { document: local, repository: this.localDocuments };
-
-    const session = await this.sessionDocuments.getById(id);
-
-    if (session)
-      return { document: session, repository: this.sessionDocuments };
-
-    throw new Error("Document not found.");
+  if (local) {
+    return {
+      document: local,
+      repository: this.localDocuments,
+    };
   }
+
+  if (session) {
+    return {
+      document: session,
+      repository: this.sessionDocuments,
+    };
+  }
+
+  throw new Error(`Document "${id}" could not be found.`);
+}
 
   private toDashboardDocument(document: Document): DashboardDocument {
     return {
