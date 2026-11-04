@@ -2,6 +2,8 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import {
+  AlertCircle,
+  Check,
   FileText,
   PanelLeftClose,
   PanelLeftOpen,
@@ -10,7 +12,10 @@ import {
   Save,
   type LucideIcon,
 } from "lucide-react";
+
 import type { AnnotationType } from "../domain/annotation.types";
+import type { SaveStatus } from "../services/annotation-autosave.controller";
+
 import { annotationTools } from "./editor-constants";
 import { Button } from "@splenddev/kreativ-ui/components";
 
@@ -21,8 +26,9 @@ interface EditorHeaderProps {
   onTogglePages: () => void;
   showProperties: boolean;
   onToggleProperties: () => void;
-  saving: boolean;
+  saveStatus: SaveStatus;
   onSave: () => void;
+  onRetry: () => void;
   creatingAnnotation: boolean;
   annotationsLoading: boolean;
   activePageExists: boolean;
@@ -36,15 +42,17 @@ export function EditorHeader({
   onTogglePages,
   showProperties,
   onToggleProperties,
-  saving,
+  saveStatus,
   onSave,
+  onRetry,
   creatingAnnotation,
   annotationsLoading,
   activePageExists,
   onCreateAnnotation,
 }: EditorHeaderProps) {
   return (
-    <header className="flex shrink-0 flex-wrap items-center justify-between gap-x-3 border-b border-border bg-surface px-3 lg:flex-nowrap">
+    <header className="z-20 flex shrink-0 flex-wrap items-center justify-between gap-x-3 border-b border-border bg-surface px-3 lg:flex-nowrap">
+      {/* Document information */}
       <div className="flex h-12 min-w-0 items-center gap-2 sm:gap-3">
         <Button
           type="button"
@@ -66,12 +74,14 @@ export function EditorHeader({
 
         <div className="flex min-w-0 items-center gap-2">
           <FileText size={16} className="shrink-0 text-text-muted" />
+
           <span className="max-w-32 truncate text-sm font-medium sm:max-w-48">
             {documentName}
           </span>
         </div>
       </div>
 
+      {/* Annotation toolbar */}
       <div
         role="toolbar"
         aria-label="Add annotation"
@@ -80,15 +90,17 @@ export function EditorHeader({
         {annotationTools.map(([type, label, Icon]) => (
           <Button
             key={type}
+            type="button"
             size="xs"
             typography="bodySmall"
-            type="button"
             disabled={
-              !activePageExists || annotationsLoading || creatingAnnotation
+              !activePageExists ||
+              annotationsLoading ||
+              creatingAnnotation
             }
             variant="ghost"
             color="neutral"
-            className="shrink-0 gap-1.5 rounded-md border border-text-muted/20"
+            className="shrink-0 gap-1.5 rounded-md border border-text-muted/20 hover:border-border hover:bg-surface-muted"
             onClick={() => onCreateAnnotation(type)}
           >
             <Icon size={14} className="text-text-muted" />
@@ -97,32 +109,25 @@ export function EditorHeader({
         ))}
       </div>
 
+      {/* Editor actions */}
       <div className="flex h-12 shrink-0 items-center gap-2">
-        <span className="hidden text-xs text-text-muted sm:inline">
-          {pageCount} pages
+        <span className="hidden whitespace-nowrap text-xs text-text-muted sm:inline">
+          {pageCount} {pageCount === 1 ? "page" : "pages"}
         </span>
 
-        <Button
-          type="button"
-          size="sm"
-          iconOnly
-          onClick={onSave}
-          disabled={saving}
-          isLoading={saving}
-          aria-label={saving ? "Saving" : "Save"}
-          className="rounded-lg "
-        >
-          <Save size={14} />
-          <span className="hidden sm:inline">
-            {saving ? "Saving..." : "Save"}
-          </span>
-        </Button>
+        <SaveButton
+          status={saveStatus}
+          onSave={onSave}
+          onRetry={onRetry}
+        />
 
         <Button
           type="button"
           onClick={onToggleProperties}
           aria-label={
-            showProperties ? "Hide properties panel" : "Show properties panel"
+            showProperties
+              ? "Hide properties panel"
+              : "Show properties panel"
           }
           aria-pressed={showProperties}
           size="sm"
@@ -142,6 +147,132 @@ export function EditorHeader({
   );
 }
 
+const SAVE_LABEL: Record<SaveStatus, string> = {
+  idle: "Save",
+  saving: "Saving...",
+  saved: "Saved",
+  error: "Retry",
+};
+
+const SAVE_ICON: Record<
+  Exclude<SaveStatus, "saving">,
+  LucideIcon
+> = {
+  idle: Save,
+  saved: Check,
+  error: AlertCircle,
+};
+
+function SaveButton({
+  status,
+  onSave,
+  onRetry,
+}: {
+  status: SaveStatus;
+  onSave: () => void;
+  onRetry: () => void;
+}) {
+  const isSaving = status === "saving";
+  const isError = status === "error";
+  const isSaved = status === "saved";
+
+  const label = SAVE_LABEL[status];
+
+  const handleClick = isError ? onRetry : onSave;
+
+  return (
+    <Button
+      type="button"
+      size={{ base: "icon", sm: "sm" }}
+      typography="bodySmall"
+      onClick={handleClick}
+      disabled={isSaving}
+      isLoading={isSaving}
+      aria-label={
+        isError
+          ? "Retry saving changes"
+          : isSaving
+            ? "Saving changes"
+            : "Save document"
+      }
+      aria-live="polite"
+      title={
+        isError
+          ? "Some changes failed to save. Retry."
+          : isSaved
+            ? "All changes saved"
+            : undefined
+      }
+      className="h-9 shrink-0 rounded-md"
+      color={isError ? "destructive" : "brand"}
+      variant={isSaved ? "soft" : "solid"}
+      leftIcon={
+        !isSaving ? (
+          <SaveStatusIcon status={status} />
+        ) : undefined
+      }
+    >
+      <span className="hidden sm:inline">
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.span
+            key={label}
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{
+              duration: 0.15,
+              ease: [0.4, 0, 0.2, 1],
+            }}
+            className="inline-block"
+          >
+            {label}
+          </motion.span>
+        </AnimatePresence>
+      </span>
+    </Button>
+  );
+}
+
+function SaveStatusIcon({
+  status,
+}: {
+  status: Exclude<SaveStatus, "saving">;
+}) {
+  const Icon = SAVE_ICON[status];
+
+  return (
+    <span className="relative flex size-4 items-center justify-center">
+      <AnimatePresence initial={false} mode="popLayout">
+        <motion.span
+          key={status}
+          initial={{
+            opacity: 0,
+            scale: 0.6,
+            rotate: -20,
+          }}
+          animate={{
+            opacity: 1,
+            scale: 1,
+            rotate: 0,
+          }}
+          exit={{
+            opacity: 0,
+            scale: 0.6,
+            rotate: 20,
+          }}
+          transition={{
+            duration: 0.15,
+            ease: [0.4, 0, 0.2, 1],
+          }}
+          className="absolute inset-0 flex items-center justify-center"
+        >
+          <Icon size={16} />
+        </motion.span>
+      </AnimatePresence>
+    </span>
+  );
+}
+
 function PanelToggleIcon({
   open,
   OpenIcon,
@@ -156,13 +287,32 @@ function PanelToggleIcon({
       <AnimatePresence initial={false} mode="popLayout">
         <motion.span
           key={open ? "close" : "open"}
-          initial={{ opacity: 0, scale: 0.5, rotate: -45 }}
-          animate={{ opacity: 1, scale: 1, rotate: 0 }}
-          exit={{ opacity: 0, scale: 0.5, rotate: 45 }}
-          transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
+          initial={{
+            opacity: 0,
+            scale: 0.5,
+            rotate: -45,
+          }}
+          animate={{
+            opacity: 1,
+            scale: 1,
+            rotate: 0,
+          }}
+          exit={{
+            opacity: 0,
+            scale: 0.5,
+            rotate: 45,
+          }}
+          transition={{
+            duration: 0.18,
+            ease: [0.4, 0, 0.2, 1],
+          }}
           className="absolute inset-0 flex items-center justify-center"
         >
-          {open ? <CloseIcon size={17} /> : <OpenIcon size={17} />}
+          {open ? (
+            <CloseIcon size={17} />
+          ) : (
+            <OpenIcon size={17} />
+          )}
         </motion.span>
       </AnimatePresence>
     </span>

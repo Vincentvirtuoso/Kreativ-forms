@@ -20,6 +20,7 @@ interface AnnotationState {
   updateStyle: (id: AnnotationId, style: Partial<AnnotationStyle>) => void;
   removeAnnotation: (id: AnnotationId) => void;
   clearAnnotations: () => void;
+  replaceAnnotation: (annotation: Annotation) => void;
 }
 
 export const useAnnotationStore = create<AnnotationState>((set) => ({
@@ -42,6 +43,17 @@ export const useAnnotationStore = create<AnnotationState>((set) => ({
         selectedAnnotationId: annotation.id,
       };
     }),
+
+  replaceAnnotation: (annotation) =>
+    set((state) => ({
+      annotations: state.annotations.map((item) =>
+        item.id === annotation.id ? annotation : item,
+      ),
+      selectedAnnotationId:
+        state.selectedAnnotationId === annotation.id
+          ? annotation.id
+          : state.selectedAnnotationId,
+    })),
 
   updateAnnotation: (id, update) =>
     set((state) => ({

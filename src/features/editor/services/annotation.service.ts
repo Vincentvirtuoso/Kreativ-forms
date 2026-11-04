@@ -2,6 +2,7 @@ import type {
   Annotation,
   AnnotationId,
   AnnotationUpdate,
+  ReplaceAnnotationInput,
 } from "../domain/annotation.types";
 
 import type {
@@ -36,5 +37,9 @@ export class AnnotationService {
 
   async deleteByDocument(documentId: DocumentId): Promise<void> {
     await this.repository.deleteByDocumentId(documentId);
+  }
+
+  async replace(annotation: ReplaceAnnotationInput): Promise<void> {
+    await this.repository.replace(annotation);
   }
 }

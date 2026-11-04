@@ -116,3 +116,10 @@ export type AnnotationUpdate =
         >
       >;
     };
+
+export type ReplaceAnnotationInput = {
+  [T in AnnotationType]: Omit<
+    Extract<Annotation, { type: T }>,
+    "createdAt" | "updatedAt"
+  >;
+}[AnnotationType];

@@ -2,6 +2,7 @@ import type {
   Annotation,
   AnnotationId,
   AnnotationUpdate,
+  ReplaceAnnotationInput,
 } from "@/features/editor/domain/annotation.types";
 
 import type {
@@ -71,6 +72,25 @@ export class SessionAnnotationRepository implements AnnotationRepository {
     validateAnnotation(next);
 
     this.annotations.set(id, structuredClone(next));
+  }
+
+  async replace(input: ReplaceAnnotationInput): Promise<void> {
+    const existing = this.annotations.get(input.id);
+    const now = new Date().toISOString();
+
+    const next = {
+      ...(existing ?? {}),
+      ...input,
+      // Trust a caller-supplied createdAt (restore/sync), otherwise preserve
+      // the original record's, otherwise stamp now.
+      createdAt:
+        (input as Partial<Annotation>).createdAt ?? existing?.createdAt ?? now,
+      updatedAt: now,
+    } as Annotation;
+
+    validateAnnotation(next);
+
+    this.annotations.set(next.id, structuredClone(next));
   }
 
   async delete(id: AnnotationId): Promise<void> {

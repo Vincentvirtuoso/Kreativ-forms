@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, LoaderCircle } from "lucide-react";
 
@@ -17,6 +17,26 @@ export default function EditorPage() {
   const [workspace, setWorkspace] = useState<DocumentWorkspace | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [navigationGuard, setNavigationGuard] = useState<
+    (() => Promise<boolean>) | null
+  >(null);
+
+  const registerNavigationGuard = useCallback(
+    (guard: () => Promise<boolean>) => {
+      setNavigationGuard(() => guard);
+    },
+    [],
+  );
+
+  const handleBackToDashboard = async () => {
+    if (!navigationGuard) return;
+
+    const canLeave = await navigationGuard();
+
+    if (canLeave) {
+      router.push("/dashboard");
+    }
+  };
 
   useEffect(() => {
     let active = true;
@@ -26,15 +46,34 @@ export default function EditorPage() {
         setLoading(true);
         setError(null);
 
-        const repositories = getDocumentRepositories("session");
 
-        const loader = new DocumentLoaderService(
-          repositories.documents,
-          repositories.assets,
-          repositories.pages,
-        );
+       const candidates = [
+         getDocumentRepositories("local"),
+         getDocumentRepositories("session"),
+       ];
 
-        const result = await loader.load(params.documentId);
+       let repositories = null;
+
+       for (const candidate of candidates) {
+         const existing = await candidate.documents.getById(params.documentId);
+
+         if (existing) {
+           repositories = candidate;
+           break;
+         }
+       }
+
+       if (!repositories) {
+         throw new Error("Document not found.");
+       }
+
+       const loader = new DocumentLoaderService(
+         repositories.documents,
+         repositories.assets,
+         repositories.pages,
+       );
+
+       const result = await loader.load(params.documentId);
 
         if (active) setWorkspace(result);
       } catch (err) {
@@ -72,11 +111,11 @@ export default function EditorPage() {
 
         <button
           type="button"
-          onClick={() => router.push("/dashboard")}
-          className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-text"
+          onClick={() => void handleBackToDashboard()}
+          aria-label="Back to dashboard"
+          className="rounded-md p-2 hover:bg-surface-raised"
         >
-          <ArrowLeft size={16} />
-          Back to dashboard
+          <ArrowLeft size={18} />
         </button>
       </section>
     );
@@ -90,7 +129,7 @@ export default function EditorPage() {
       <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border px-5">
         <button
           type="button"
-          onClick={() => router.push("/dashboard")}
+          onClick={() => void handleBackToDashboard()}
           aria-label="Back to dashboard"
           className="rounded-md p-2 hover:bg-surface-raised"
         >
@@ -107,6 +146,7 @@ export default function EditorPage() {
         pages={workspace.pages}
         workingPdf={workspace.workingPdf}
         assets={workspace.assets}
+        onRegisterNavigationGuard={registerNavigationGuard}
       />
     </section>
   );

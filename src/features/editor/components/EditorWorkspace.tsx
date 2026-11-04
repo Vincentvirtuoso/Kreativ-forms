@@ -13,19 +13,21 @@ import { PdfDocumentViewer } from "./PdfDocumentViewer";
 import { EditorHeader } from "./EditorHeader";
 import { PagesPanel } from "./PagesPanel";
 import { PropertiesPanel } from "./PropertiesPanel";
+
 import { AnnotationService } from "../services/annotation.service";
 import { createAnnotation } from "../services/annotation.factory";
 import { useAnnotationPersistence } from "../hooks/useAnnotationPersistence";
 import { useAnnotationStore } from "../stores/useAnnotationStore";
+
 import type {
   Annotation,
   AnnotationPosition,
   AnnotationType,
   AnnotationUpdate,
 } from "../domain/annotation.types";
+import { DocumentPersistenceService } from "@/features/documents/services/document-persistence.service";
+import { useDocumentSaveGuard } from "../hooks/useDocumentSaveGuard";
 
-// Sizes are percentages of the page. Keep in sync with DEFAULT_SIZE in
-// AnnotationOverlay so header-created and double-tap-created annotations match.
 const DEFAULT_SIZE: Record<AnnotationType, { width: number; height: number }> =
   {
     text: { width: 30, height: 12 },
@@ -47,6 +49,7 @@ interface EditorWorkspaceProps {
   pages: DocumentPage[];
   workingPdf: StoredDocumentAsset;
   assets: StoredDocumentAsset[];
+  onRegisterNavigationGuard?: (guard: () => Promise<boolean>) => void;
 }
 
 export function EditorWorkspace({
@@ -54,35 +57,43 @@ export function EditorWorkspace({
   pages,
   workingPdf,
   assets,
+  onRegisterNavigationGuard,
 }: EditorWorkspaceProps) {
   const [selectedPage, setSelectedPage] = useState(1);
   const [showPages, setShowPages] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [creatingAnnotation, setCreatingAnnotation] = useState(false);
   const [showProperties, setShowProperties] = useState(true);
   const [thumbnailUrls, setThumbnailUrls] = useState<Record<string, string>>(
     {},
   );
+  const [documentSaveFailed, setDocumentSaveFailed] = useState(false);
 
   const addAnnotation = useAnnotationStore((state) => state.addAnnotation);
+
   const setAnnotations = useAnnotationStore((state) => state.setAnnotations);
+
   const clearAnnotations = useAnnotationStore(
     (state) => state.clearAnnotations,
   );
+
   const removeAnnotation = useAnnotationStore(
     (state) => state.removeAnnotation,
   );
+
   const selectAnnotation = useAnnotationStore(
     (state) => state.selectAnnotation,
   );
+
   const selectedAnnotationId = useAnnotationStore(
     (state) => state.selectedAnnotationId,
   );
+
   const selectedAnnotation = useAnnotationStore((state) =>
     state.annotations.find(
       (annotation) => annotation.id === selectedAnnotationId,
     ),
   );
+
   const updateAnnotation = useAnnotationStore(
     (state) => state.updateAnnotation,
   );
@@ -92,10 +103,42 @@ export function EditorWorkspace({
 
   const annotationService = useMemo(() => {
     const repositories = getDocumentRepositories(document.persistence);
+
     return new AnnotationService(repositories.annotations);
   }, [document.persistence]);
 
-  const { autosave } = useAnnotationPersistence(annotationService);
+  const {
+    autosave,
+    saveStatus,
+    // retrySave
+  } = useAnnotationPersistence(annotationService, document.id);
+
+  const documentPersistence = useMemo(() => {
+    const repositories = getDocumentRepositories(document.persistence);
+
+    return new DocumentPersistenceService(repositories);
+  }, [document.persistence]);
+
+  const hasUnsavedChanges = autosave.hasPending() || documentSaveFailed;
+
+  const { confirmNavigation } = useDocumentSaveGuard({
+    hasUnsavedChanges,
+    save: async () => {
+      const success = await handleSave();
+
+      if (!success) {
+        throw new Error("Unable to save document.");
+      }
+    },
+  });
+
+  useEffect(() => {
+    onRegisterNavigationGuard?.(confirmNavigation);
+
+    return () => {
+      onRegisterNavigationGuard?.(async () => false);
+    };
+  }, [confirmNavigation, onRegisterNavigationGuard]);
 
   useEffect(() => {
     if (isMobileViewport()) {
@@ -104,80 +147,34 @@ export function EditorWorkspace({
     }
   }, []);
 
-  async function handleSave() {
-    if (saving) return;
-
-    setSaving(true);
-    setAnnotationError(null);
-
-    try {
-      await autosave.flushAll();
-    } catch {
-      setAnnotationError(
-        "Some annotation changes could not be saved. Please try again.",
-      );
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  const handleAnnotationDelete = async (id: string) => {
-    if (annotationsLoading) return;
-
-    try {
-      await autosave.flush(id);
-      await annotationService.delete(id);
-
-      removeAnnotation(id);
-      selectAnnotation(null);
-      setAnnotationError(null);
-    } catch (error) {
-      console.error("Failed to delete annotation:", error);
-      setAnnotationError("Unable to delete annotation. Please try again.");
-    }
-  };
-
   function persistAnnotationUpdate(id: string, update: AnnotationUpdate) {
-    const current = useAnnotationStore
-      .getState()
-      .annotations.find((item) => item.id === id);
-
-    if (!current || current.type !== update.type) return;
-
-    useAnnotationStore.getState().updateAnnotation(id, update);
-    autosave.schedule(id, update);
     setAnnotationError(null);
+    autosave.schedule(id, update);
   }
 
   function handleAnnotationUpdate(update: AnnotationUpdate) {
-    if (!selectedAnnotation) return;
+    if (!selectedAnnotation || selectedAnnotation.type !== update.type) {
+      return;
+    }
 
+    updateAnnotation(selectedAnnotation.id, update);
     persistAnnotationUpdate(selectedAnnotation.id, update);
   }
 
-  function handlePositionChange(
-    key: keyof Annotation["position"],
-    value: number,
-  ) {
+  function handlePositionChange(key: keyof AnnotationPosition, value: number) {
     if (!selectedAnnotation || !Number.isFinite(value)) return;
 
-    const position = { ...selectedAnnotation.position };
-    const nextValue = Math.max(0, Math.min(100, value));
+    const position = {
+      ...selectedAnnotation.position,
+      [key]: value,
+    };
 
-    if (key === "x") {
-      position.x = Math.min(nextValue, 100 - position.width);
-    } else if (key === "y") {
-      position.y = Math.min(nextValue, 100 - position.height);
-    } else if (key === "width") {
-      position.width = Math.min(nextValue, 100 - position.x);
-    } else {
-      position.height = Math.min(nextValue, 100 - position.y);
-    }
-
-    handleAnnotationUpdate({
+    const update: AnnotationUpdate = {
       type: selectedAnnotation.type,
       changes: { position },
-    } as AnnotationUpdate);
+    } as AnnotationUpdate;
+
+    handleAnnotationUpdate(update);
   }
 
   useEffect(() => {
@@ -190,6 +187,7 @@ export function EditorWorkspace({
 
       try {
         const result = await annotationService.loadByDocument(document.id);
+
         if (active) {
           setAnnotations(result);
         }
@@ -207,6 +205,7 @@ export function EditorWorkspace({
         }
       }
     }
+
     void loadAnnotations();
 
     return () => {
@@ -219,6 +218,8 @@ export function EditorWorkspace({
     () => [...pages].sort((a, b) => a.order - b.order),
     [pages],
   );
+
+  const activePage = orderedPages[selectedPage - 1];
 
   useEffect(() => {
     const urls: Record<string, string> = {};
@@ -242,20 +243,23 @@ export function EditorWorkspace({
     );
   }, [orderedPages.length]);
 
-  const activePage = orderedPages[selectedPage - 1];
-
   function handleSelectPage(page: number) {
     setSelectedPage(page);
     selectAnnotation(null);
 
-    if (isMobileViewport()) setShowPages(false);
+    if (isMobileViewport()) {
+      setShowPages(false);
+    }
   }
 
   function buildAnnotation(
     type: AnnotationType,
     pageId: string,
     position: AnnotationPosition,
-    overrides?: { required?: boolean; style?: Annotation["style"] },
+    overrides?: {
+      required?: boolean;
+      style?: Annotation["style"];
+    },
   ): Annotation {
     const base = {
       documentId: document.id,
@@ -267,7 +271,7 @@ export function EditorWorkspace({
 
     switch (type) {
       case "text":
-        return createAnnotation({
+        return createAnnotation<"text">({
           ...base,
           type: "text",
           value: "",
@@ -276,7 +280,7 @@ export function EditorWorkspace({
         });
 
       case "date":
-        return createAnnotation({
+        return createAnnotation<"date">({
           ...base,
           type: "date",
           value: "",
@@ -285,14 +289,14 @@ export function EditorWorkspace({
         });
 
       case "checkbox":
-        return createAnnotation({
+        return createAnnotation<"checkbox">({
           ...base,
           type: "checkbox",
           checked: false,
         });
 
       case "signature":
-        return createAnnotation({
+        return createAnnotation<"signature">({
           ...base,
           type: "signature",
           value: null,
@@ -304,12 +308,15 @@ export function EditorWorkspace({
     type: AnnotationType,
     at?: AnnotationPosition,
   ): Promise<string | undefined> {
-    if (!activePage || creatingAnnotation || annotationsLoading) return;
+    if (!activePage || creatingAnnotation || annotationsLoading) {
+      return;
+    }
 
     setCreatingAnnotation(true);
     setAnnotationError(null);
 
     const size = DEFAULT_SIZE[type];
+
     const position: AnnotationPosition = at ?? {
       ...size,
       x: (100 - size.width) / 2,
@@ -327,60 +334,136 @@ export function EditorWorkspace({
       return annotation.id;
     } catch (error) {
       console.error("Failed to create annotation:", error);
+
       setAnnotationError("Unable to create annotation. Please try again.");
+
+      return undefined;
     } finally {
       setCreatingAnnotation(false);
     }
   }
 
-  async function handleChangeAnnotationType(id: string, type: AnnotationType) {
+  async function handleAnnotationDelete(id: string) {
     if (annotationsLoading) return;
-
-    const current = useAnnotationStore
-      .getState()
-      .annotations.find((annotation) => annotation.id === id);
-
-    if (!current || current.type === type) return;
-
-    const resize = current.type === "checkbox" || type === "checkbox";
-    const position: AnnotationPosition = resize
-      ? {
-          ...current.position,
-          ...DEFAULT_SIZE[type],
-          x: Math.min(current.position.x, 100 - DEFAULT_SIZE[type].width),
-          y: Math.min(current.position.y, 100 - DEFAULT_SIZE[type].height),
-        }
-      : current.position;
-
-    const next = {
-      ...buildAnnotation(type, current.pageId, position, {
-        required: current.required,
-        style: current.style,
-      }),
-      id: current.id,
-    } as Annotation;
-
-    setAnnotationError(null);
 
     try {
       await autosave.flush(id);
       await annotationService.delete(id);
 
-      try {
-        await annotationService.create(next);
-      } catch (error) {
-        await annotationService.create(current).catch(() => undefined);
-        throw error;
-      }
-
       removeAnnotation(id);
-      addAnnotation(next);
-      selectAnnotation(next.id);
+
+      setAnnotationError(null);
     } catch (error) {
-      console.error("Failed to change annotation type:", error);
-      setAnnotationError("Unable to change annotation type. Please try again.");
+      console.error("Failed to delete annotation:", error);
+
+      setAnnotationError("Unable to delete annotation. Please try again.");
+
+      throw error;
     }
   }
+
+  async function handleChangeAnnotationType(
+    id: string,
+    type: AnnotationType,
+  ): Promise<void> {
+    const current = useAnnotationStore
+      .getState()
+      .annotations.find((item) => item.id === id);
+
+    if (!current || current.type === type) return;
+
+    try {
+      await autosave.flush(id);
+
+      const base = {
+        documentId: current.documentId,
+        pageId: current.pageId,
+        position: current.position,
+        required: current.required,
+        style: { ...current.style },
+      };
+
+      let replacement: Annotation;
+
+      switch (type) {
+        case "text":
+          replacement = createAnnotation<"text">({
+            ...base,
+            type: "text",
+            value: "",
+            placeholder: "Enter text",
+            multiline: false,
+          });
+          break;
+
+        case "date":
+          replacement = createAnnotation<"date">({
+            ...base,
+            type: "date",
+            value: "",
+            placeholder: "Select date",
+            format: "YYYY-MM-DD",
+          });
+          break;
+
+        case "checkbox":
+          replacement = createAnnotation<"checkbox">({
+            ...base,
+            type: "checkbox",
+            checked: false,
+          });
+          break;
+
+        case "signature":
+          replacement = createAnnotation<"signature">({
+            ...base,
+            type: "signature",
+            value: null,
+          });
+          break;
+      }
+
+      const updatedAnnotation: Annotation = {
+        ...replacement,
+        id: current.id,
+        createdAt: current.createdAt,
+        updatedAt: new Date().toISOString(),
+      };
+
+      await annotationService.replace(updatedAnnotation);
+
+      useAnnotationStore.getState().replaceAnnotation(updatedAnnotation);
+
+      setAnnotationError(null);
+    } catch (error) {
+      console.error("Failed to change annotation type:", error);
+
+      setAnnotationError("Could not change annotation type. Please try again.");
+
+      throw error;
+    }
+  }
+
+  const handleSave = async (): Promise<boolean> => {
+    if (annotationsLoading) return false;
+
+    setDocumentSaveFailed(false);
+
+    try {
+      await documentPersistence.save(document.id, () => autosave.flushAll());
+
+      setAnnotationError(null);
+      return true;
+    } catch (error) {
+      console.error("Document save failed:", error);
+
+      setDocumentSaveFailed(true);
+      setAnnotationError("Unable to save all document changes. Please retry.");
+      return false;
+    }
+  };
+
+  const editorSaveStatus = documentSaveFailed ? "error" : saveStatus;
 
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] min-h-125 flex-col overflow-hidden bg-background text-text">
@@ -391,8 +474,9 @@ export function EditorWorkspace({
         onTogglePages={() => setShowPages((value) => !value)}
         showProperties={showProperties}
         onToggleProperties={() => setShowProperties((value) => !value)}
-        saving={saving}
+        saveStatus={editorSaveStatus}
         onSave={handleSave}
+        onRetry={handleSave}
         creatingAnnotation={creatingAnnotation}
         annotationsLoading={annotationsLoading}
         activePageExists={Boolean(activePage)}

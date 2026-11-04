@@ -1,11 +1,13 @@
-import type {
-  Annotation,
-  CreateAnnotationInput,
-} from "../domain/annotation.types";
+import type { Annotation, AnnotationType } from "../domain/annotation.types";
 
-export function createAnnotation<T extends CreateAnnotationInput>(
-  input: T,
-): T & Pick<Annotation, "id" | "createdAt" | "updatedAt"> {
+type AnnotationInput<T extends AnnotationType> = Omit<
+  Extract<Annotation, { type: T }>,
+  "id" | "createdAt" | "updatedAt"
+>;
+
+export function createAnnotation<T extends AnnotationType>(
+  input: AnnotationInput<T>,
+): Extract<Annotation, { type: T }> {
   const now = new Date().toISOString();
 
   return {
@@ -13,5 +15,5 @@ export function createAnnotation<T extends CreateAnnotationInput>(
     id: crypto.randomUUID(),
     createdAt: now,
     updatedAt: now,
-  };
+  } as Extract<Annotation, { type: T }>;
 }

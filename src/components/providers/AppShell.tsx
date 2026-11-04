@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 
 import UserMenu from "../layout/user-menu";
-import Sidebar from "../layout/Sidebar";
+import Sidebar from "../layout/sidebar";
 
 type AppShellProps = {
   children: React.ReactNode;

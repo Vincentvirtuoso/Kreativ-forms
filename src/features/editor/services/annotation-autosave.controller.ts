@@ -2,9 +2,9 @@ import type {
   AnnotationId,
   AnnotationUpdate,
 } from "../domain/annotation.types";
-
-import type { AnnotationRepository } from "../repositories/annotation.repository";
 import { AnnotationService } from "./annotation.service";
+
+export type SaveStatus = "idle" | "saving" | "saved" | "error";
 
 type PendingUpdate = {
   update: AnnotationUpdate;
@@ -19,6 +19,7 @@ export class AnnotationAutosaveController {
     private readonly service: AnnotationService,
     private readonly delay = 500,
     private readonly onError?: (error: unknown, id: AnnotationId) => void,
+    private readonly onStatusChange?: (status: SaveStatus) => void,
   ) {}
 
   schedule(id: AnnotationId, update: AnnotationUpdate): void {
@@ -36,44 +37,62 @@ export class AnnotationAutosaveController {
 
     const timer = setTimeout(() => {
       void this.flush(id).catch(() => {
-        // The failed update remains pending for a later retry.
+        // Failed updates remain pending for retry.
       });
     }, this.delay);
 
     this.pending.set(id, { update: merged, timer });
+    this.onStatusChange?.("saving");
   }
 
   async flush(id: AnnotationId): Promise<void> {
-    const active = this.inFlight.get(id);
+    while (true) {
+      const pending = this.pending.get(id);
 
-    if (active) {
-      await active;
-
-      // Updates may have arrived while the previous save was running.
-      if (this.pending.has(id)) {
-        await this.flush(id);
+      if (pending?.timer) {
+        clearTimeout(pending.timer);
+        pending.timer = null;
       }
 
-      return;
-    }
+      const active = this.inFlight.get(id);
 
-    const operation = this.flushPending(id);
-    this.inFlight.set(id, operation);
+      if (active) {
+        await active;
+        continue;
+      }
 
-    try {
-      await operation;
-    } finally {
-      if (this.inFlight.get(id) === operation) {
-        this.inFlight.delete(id);
+      if (!this.pending.has(id)) {
+        return;
+      }
+
+      const operation = this.drain(id);
+      this.inFlight.set(id, operation);
+
+      try {
+        await operation;
+      } finally {
+        if (this.inFlight.get(id) === operation) {
+          this.inFlight.delete(id);
+        }
+
+        if (this.pending.size === 0 && this.inFlight.size === 0) {
+          this.onStatusChange?.("saved");
+        }
       }
     }
   }
 
-  private async flushPending(id: AnnotationId): Promise<void> {
+  private async drain(id: AnnotationId): Promise<void> {
     while (true) {
       const pending = this.pending.get(id);
 
-      if (!pending) return;
+      if (!pending) {
+        if (this.pending.size === 0 && this.inFlight.size <= 1) {
+          this.onStatusChange?.("saved");
+        }
+
+        return;
+      }
 
       if (pending.timer) {
         clearTimeout(pending.timer);
@@ -99,30 +118,48 @@ export class AnnotationAutosaveController {
           timer: null,
         });
 
+        this.onStatusChange?.("error");
         this.onError?.(error, id);
+
         throw error;
       }
     }
   }
 
   async flushAll(): Promise<void> {
-    const ids = [...new Set([...this.pending.keys(), ...this.inFlight.keys()])];
+    while (this.pending.size > 0 || this.inFlight.size > 0) {
+      const ids = new Set([...this.pending.keys(), ...this.inFlight.keys()]);
 
-    const results = await Promise.allSettled(ids.map((id) => this.flush(id)));
+      const results = await Promise.allSettled(
+        [...ids].map((id) => this.flush(id)),
+      );
 
-    const failed = results.filter((result) => result.status === "rejected");
+      const failures = results.filter((result) => result.status === "rejected");
 
-    if (failed.length) {
-      throw new Error(`${failed.length} annotation update(s) failed to save.`);
+      if (failures.length > 0) {
+        this.onStatusChange?.("error");
+
+        throw new Error(
+          `${failures.length} annotation update(s) failed to save.`,
+        );
+      }
     }
+
+    this.onStatusChange?.("saved");
+  }
+
+  hasPending(id?: AnnotationId): boolean {
+    if (id) {
+      return this.pending.has(id) || this.inFlight.has(id);
+    }
+
+    return this.pending.size > 0 || this.inFlight.size > 0;
   }
 
   cancel(id: AnnotationId): void {
     const pending = this.pending.get(id);
 
-    if (!pending) return;
-
-    if (pending.timer) {
+    if (pending?.timer) {
       clearTimeout(pending.timer);
     }
 
