@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Eraser, Check, X } from "lucide-react";
+import { Button } from "@splenddev/kreativ-ui/components";
 
 interface SignaturePadProps {
   initialValue?: string | null;
@@ -138,34 +139,26 @@ export function SignaturePad({
       />
 
       <div className="flex justify-between">
-        <button
-          type="button"
-          onClick={clear}
-          className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-text"
-        >
+        <Button type="button" variant="ghost" onClick={clear} color="neutral">
           <Eraser size={15} />
           Clear
-        </button>
+        </Button>
 
         <div className="flex gap-2">
-          <button
+          <Button
             type="button"
+            variant="outline"
+            color="neutral"
             onClick={onCancel}
-            className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm"
           >
             <X size={16} />
             Cancel
-          </button>
+          </Button>
 
-          <button
-            type="button"
-            disabled={!hasDrawing}
-            onClick={save}
-            className="inline-flex items-center gap-2 rounded-md bg-brand px-3 py-2 text-sm text-white disabled:opacity-40"
-          >
+          <Button type="button" disabled={!hasDrawing} onClick={save}>
             <Check size={15} />
             Use signature
-          </button>
+          </Button>
         </div>
       </div>
     </div>

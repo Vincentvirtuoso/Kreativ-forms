@@ -11,6 +11,10 @@ import type {
 
 import { useAnnotationStore } from "../stores/useAnnotationStore";
 import { SignaturePad } from "./SignaturePad";
+import { ANNOTATION_RULES } from "../domain/annotation.rules";
+import { Button } from "@splenddev/kreativ-ui/components";
+
+type AnnotationType = Annotation["type"];
 
 interface AnnotationOverlayProps {
   pageId: string;
@@ -21,6 +25,13 @@ interface AnnotationOverlayProps {
   onUpdate: (id: string, update: AnnotationUpdate) => void;
 
   onDelete?: (id: string) => Promise<void> | void;
+
+  onCreate?: (
+    type: AnnotationType,
+    position: AnnotationPosition,
+  ) => string | void | Promise<string | void>;
+
+  onChangeType?: (id: string, type: AnnotationType) => Promise<void> | void;
 }
 
 type DragState = {
@@ -34,11 +45,33 @@ type DragState = {
 
 type Preview = { id: string; position: AnnotationPosition };
 
-const MIN_WIDTH = 2;
-const MIN_HEIGHT = 2;
+type Tap = { time: number; x: number; y: number; key: string };
+
+const MIN_WIDTH = ANNOTATION_RULES.minWidth;
+const MIN_HEIGHT = ANNOTATION_RULES.minHeight;
 const BASE_FONT_SIZE = 14;
 const KEY_STEP = 1;
 const KEY_STEP_LARGE = 5;
+
+const DOUBLE_TAP_MS = 350;
+const DOUBLE_TAP_DISTANCE = 28;
+
+const DEFAULT_TYPE: AnnotationType = "text";
+
+const DEFAULT_SIZE: Record<AnnotationType, { width: number; height: number }> =
+  {
+    text: { width: 30, height: 12 },
+    date: { width: 25, height: 12 },
+    checkbox: { width: 12, height: 12 },
+    signature: { width: 35, height: 12 },
+  };
+
+const TYPE_OPTIONS: { type: AnnotationType; label: string }[] = [
+  { type: "text", label: "Text" },
+  { type: "date", label: "Date" },
+  { type: "checkbox", label: "Checkbox" },
+  { type: "signature", label: "Signature" },
+];
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -105,11 +138,14 @@ export function AnnotationOverlay({
   scale = 1,
   onUpdate,
   onDelete,
+  onCreate,
+  onChangeType,
 }: AnnotationOverlayProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   const dragRef = useRef<DragState | null>(null);
   const previewRef = useRef<AnnotationPosition | null>(null);
+  const lastTapRef = useRef<Tap | null>(null);
 
   const annotations = useAnnotationStore((state) => state.annotations);
   const selectedId = useAnnotationStore((state) => state.selectedAnnotationId);
@@ -127,7 +163,6 @@ export function AnnotationOverlay({
   );
   const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
 
-  
   const pageAnnotations = useMemo(
     () =>
       annotations.filter(
@@ -140,6 +175,10 @@ export function AnnotationOverlay({
   const editingSignature = pageAnnotations.find(
     (annotation): annotation is Extract<Annotation, { type: "signature" }> =>
       annotation.id === editingSignatureId && annotation.type === "signature",
+  );
+
+  const selectedAnnotation = pageAnnotations.find(
+    (annotation) => annotation.id === selectedId,
   );
 
   useEffect(() => {
@@ -155,10 +194,32 @@ export function AnnotationOverlay({
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") setEditingSignatureId(null);
     }
-    
+
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [editingSignatureId]);
+
+  /**
+   * Unified double-click / double-tap detection. Native `dblclick` is
+   * unreliable on touch devices, so we track taps ourselves via pointerdown.
+   */
+  function registerTap(event: React.PointerEvent, key: string): boolean {
+    const now = event.timeStamp;
+    const last = lastTapRef.current;
+
+    const isDouble =
+      !!last &&
+      last.key === key &&
+      now - last.time <= DOUBLE_TAP_MS &&
+      Math.hypot(event.clientX - last.x, event.clientY - last.y) <=
+        DOUBLE_TAP_DISTANCE;
+
+    lastTapRef.current = isDouble
+      ? null
+      : { time: now, x: event.clientX, y: event.clientY, key };
+
+    return isDouble;
+  }
 
   function resetDrag(pointerId?: number) {
     dragRef.current = null;
@@ -170,6 +231,30 @@ export function AnnotationOverlay({
       containerRef.current?.hasPointerCapture(pointerId)
     ) {
       containerRef.current.releasePointerCapture(pointerId);
+    }
+  }
+
+  async function createDefaultAnnotation(event: React.PointerEvent) {
+    if (disabled || !onCreate || !containerRef.current) return;
+
+    const bounds = containerRef.current.getBoundingClientRect();
+    if (!bounds.width || !bounds.height) return;
+
+    const size = DEFAULT_SIZE[DEFAULT_TYPE];
+    const pointX = ((event.clientX - bounds.left) / bounds.width) * 100;
+    const pointY = ((event.clientY - bounds.top) / bounds.height) * 100;
+
+    const position: AnnotationPosition = {
+      ...size,
+      x: clamp(pointX - size.width / 2, 0, 100 - size.width),
+      y: clamp(pointY - size.height / 2, 0, 100 - size.height),
+    };
+
+    try {
+      const id = await onCreate(DEFAULT_TYPE, position);
+      if (id) selectAnnotation(id);
+    } catch (error) {
+      console.error("Failed to create annotation", error);
     }
   }
 
@@ -194,6 +279,15 @@ export function AnnotationOverlay({
     event.currentTarget
       .closest<HTMLElement>("[data-annotation-id]")
       ?.focus({ preventScroll: true });
+
+    if (
+      mode === "move" &&
+      annotation.type === "signature" &&
+      registerTap(event, annotation.id)
+    ) {
+      setEditingSignatureId(annotation.id);
+      return;
+    }
 
     dragRef.current = {
       id: annotation.id,
@@ -272,6 +366,17 @@ export function AnnotationOverlay({
       await onDelete(id);
     } catch (error) {
       console.error("Failed to delete annotation", error);
+    }
+  }
+
+  async function changeType(annotation: Annotation, type: AnnotationType) {
+    if (disabled || !onChangeType || annotation.type === type) return;
+
+    try {
+      await onChangeType(annotation.id, type);
+      if (type === "signature") setEditingSignatureId(annotation.id);
+    } catch (error) {
+      console.error("Failed to change annotation type", error);
     }
   }
 
@@ -387,11 +492,15 @@ export function AnnotationOverlay({
     }
   }
 
+  const showToolbar =
+    !disabled && !!selectedAnnotation && !!portalRoot && !editingSignatureId;
+
   return (
     <>
       <div
         ref={containerRef}
         className="absolute inset-0 overflow-hidden"
+        style={{ touchAction: "manipulation" }}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerCancel}
@@ -399,8 +508,12 @@ export function AnnotationOverlay({
           if (dragRef.current?.pointerId === event.pointerId) resetDrag();
         }}
         onPointerDown={(event) => {
-          if (event.target === event.currentTarget) {
-            selectAnnotation(null);
+          if (event.target !== event.currentTarget) return;
+
+          selectAnnotation(null);
+
+          if (registerTap(event, "page")) {
+            void createDefaultAnnotation(event);
           }
         }}
       >
@@ -415,6 +528,11 @@ export function AnnotationOverlay({
           const fontSize =
             (annotation.style.fontSize ?? BASE_FONT_SIZE) * scale;
 
+          const showMoveGrip =
+            selected &&
+            !disabled &&
+            (annotation.type === "text" || annotation.type === "date");
+
           return (
             <div
               key={annotation.id}
@@ -426,11 +544,6 @@ export function AnnotationOverlay({
               onPointerDown={(event) =>
                 beginInteraction(event, annotation, "move")
               }
-              onDoubleClick={() => {
-                if (!disabled && annotation.type === "signature") {
-                  setEditingSignatureId(annotation.id);
-                }
-              }}
               onKeyDown={(event) => handleAnnotationKeyDown(event, annotation)}
               style={{
                 left: `${position.x}%`,
@@ -456,11 +569,38 @@ export function AnnotationOverlay({
                 disabled ? "cursor-default" : "cursor-move"
               } ${selected ? "ring-2 ring-brand/20" : ""}`}
             >
-              <AnnotationContent
-                annotation={annotation}
-                disabled={disabled}
-                onChange={(value) => handleAnnotationChange(annotation, value)}
-              />
+              {/*
+                Content only receives pointer events once the annotation is
+                selected. Before that, a touch/click on it falls through to the
+                wrapper so it can be selected and dragged (inputs fill the whole
+                box, which would otherwise make them impossible to move on touch).
+              */}
+              <div
+                className={`flex h-full w-full items-center ${
+                  selected && !disabled ? "" : "pointer-events-none"
+                }`}
+              >
+                <AnnotationContent
+                  annotation={annotation}
+                  disabled={disabled}
+                  onChange={(value) =>
+                    handleAnnotationChange(annotation, value)
+                  }
+                  onRequestSign={() => setEditingSignatureId(annotation.id)}
+                />
+              </div>
+
+              {showMoveGrip && (
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  aria-label="Move annotation"
+                  onPointerDown={(event) =>
+                    beginInteraction(event, annotation, "move")
+                  }
+                  className="absolute left-0 top-0 z-10 h-3 w-3 cursor-move rounded-br-sm border border-white bg-brand before:absolute before:-inset-2 before:content-[''] pointer-coarse:h-6 pointer-coarse:w-6 pointer-coarse:before:-inset-1"
+                />
+              )}
 
               {selected && !disabled && (
                 <button
@@ -470,7 +610,7 @@ export function AnnotationOverlay({
                   onPointerDown={(event) =>
                     beginInteraction(event, annotation, "resize")
                   }
-                  className="absolute bottom-0 right-0 z-10 h-3 w-3 cursor-nwse-resize rounded-tl-sm border border-white bg-brand before:absolute before:-inset-2 before:content-['']"
+                  className="absolute bottom-0 right-0 z-10 h-3 w-3 cursor-nwse-resize rounded-tl-sm border border-white bg-brand before:absolute before:-inset-2 before:content-[''] pointer-coarse:h-6 pointer-coarse:w-6 pointer-coarse:before:-inset-1"
                 />
               )}
             </div>
@@ -478,11 +618,26 @@ export function AnnotationOverlay({
         })}
       </div>
 
+      {showToolbar &&
+        selectedAnnotation &&
+        createPortal(
+          <AnnotationToolbar
+            annotation={selectedAnnotation}
+            canChangeType={!!onChangeType}
+            canDelete={!!onDelete}
+            onChangeType={(type) => void changeType(selectedAnnotation, type)}
+            onDelete={() => void deleteAnnotation(selectedAnnotation.id)}
+            onSign={() => setEditingSignatureId(selectedAnnotation.id)}
+            onDone={() => selectAnnotation(null)}
+          />,
+          portalRoot,
+        )}
+
       {editingSignatureId &&
         portalRoot &&
         createPortal(
           <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+            className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4"
             onPointerDown={(event) => {
               if (event.target === event.currentTarget) {
                 setEditingSignatureId(null);
@@ -493,7 +648,7 @@ export function AnnotationOverlay({
               role="dialog"
               aria-modal="true"
               aria-label="Add signature"
-              className="w-full max-w-lg rounded-xl border border-border bg-background p-4 shadow-xl"
+              className="max-h-[90dvh] w-full max-w-lg overflow-y-auto overscroll-contain rounded-t-xl border border-border bg-background p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-xl sm:rounded-xl"
             >
               <div className="mb-4 flex items-center justify-between">
                 <h3 className="text-sm font-semibold">
@@ -502,7 +657,7 @@ export function AnnotationOverlay({
                 <button
                   type="button"
                   onClick={() => setEditingSignatureId(null)}
-                  className="text-sm text-text-muted hover:text-text"
+                  className="min-h-10 px-2 text-sm text-text-muted hover:text-text"
                 >
                   Cancel
                 </button>
@@ -521,14 +676,102 @@ export function AnnotationOverlay({
   );
 }
 
+/**
+ * Bottom-docked toolbar for the selected annotation. Docked at the bottom so
+ * it sits within thumb reach on phones and never gets clipped by the page.
+ */
+function AnnotationToolbar({
+  annotation,
+  canChangeType,
+  canDelete,
+  onChangeType,
+  onDelete,
+  onSign,
+  onDone,
+}: {
+  annotation: Annotation;
+  canChangeType: boolean;
+  canDelete: boolean;
+  onChangeType: (type: AnnotationType) => void;
+  onDelete: () => void;
+  onSign: () => void;
+  onDone: () => void;
+}) {
+  const buttonBase =
+    "min-h-10 shrink-0 rounded-lg px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand";
+
+  return (
+    <div
+      role="toolbar"
+      aria-label="Annotation tools"
+      className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+    >
+      <div className="pointer-events-auto flex max-w-full items-center gap-1 overflow-x-auto rounded-xl border border-border bg-background p-1.5 shadow-lg">
+        {canChangeType && (
+          <div
+            role="group"
+            aria-label="Annotation type"
+            className="flex items-center gap-1"
+          >
+            {TYPE_OPTIONS.map((option) => {
+              const active = annotation.type === option.type;
+
+              return (
+                <Button
+                  key={option.type}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => onChangeType(option.type)}
+                  color={active ? "brand" : "neutral"}
+                  variant={active ? "solid" : "ghost"}
+                >
+                  {option.label}
+                </Button>
+              );
+            })}
+          </div>
+        )}
+
+        {annotation.type === "signature" && (
+          <>
+            <span className="mx-1 h-6 w-px shrink-0 bg-border" aria-hidden />
+            <Button type="button" onClick={onSign} variant="soft">
+              {annotation.value ? "Redo" : "Sign"}
+            </Button>
+          </>
+        )}
+
+        <span className="mx-1 h-6 w-px shrink-0 bg-border" aria-hidden />
+
+        {canDelete && (
+          <Button
+            type="button"
+            onClick={onDelete}
+            variant="ghost"
+            color="destructive"
+          >
+            Delete
+          </Button>
+        )}
+
+        <Button type="button" onClick={onDone} variant="ghost" color="brand">
+          Done
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function AnnotationContent({
   annotation,
   disabled,
   onChange,
+  onRequestSign,
 }: {
   annotation: Annotation;
   disabled: boolean;
   onChange: (value: string | boolean) => void;
+  onRequestSign: () => void;
 }) {
   const controlClass =
     "h-full w-full min-w-0 border-0 bg-transparent px-1 text-inherit outline-none";
@@ -594,12 +837,10 @@ function AnnotationContent({
           type="button"
           disabled={disabled}
           onPointerDown={(event) => event.stopPropagation()}
-          onClick={() => {
-            // The annotation's double-click handler opens the signature pad.
-          }}
+          onClick={onRequestSign}
           className="h-full w-full text-center text-xs italic text-text-muted"
         >
-          Double-click to sign
+          Tap to sign
         </button>
       );
   }

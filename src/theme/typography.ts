@@ -6,6 +6,11 @@ export const typography = defineTypography({
     fontSize: "14px",
     lineHeight: "1.6",
   },
+  bodySmall: {
+    fontFamily: "{fonts.sans}",
+    fontSize: "12.5px",
+    lineHeight: "1.6",
+  },
 
   heading: {
     fontFamily: "{fonts.heading}",

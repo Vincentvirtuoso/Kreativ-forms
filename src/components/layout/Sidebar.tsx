@@ -1,7 +1,9 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+
 import { AnimatePresence, motion } from "framer-motion";
+
 import {
   FileText,
   Clock,
@@ -19,8 +21,10 @@ import {
   ChevronDown,
   FolderClosed,
 } from "lucide-react";
+
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+
 import { cn } from "@/lib/cn";
 
 const navItems = [
@@ -120,7 +124,14 @@ const SidebarContent = ({
   onExpand,
   onClose,
 }: SidebarContentProps) => {
-  const isActive = (href: string) => pathname === href;
+  const isActive = (href: string) => {
+    if (pathname === href) return true;
+
+    // The dashboard root should not remain active on every dashboard page.
+    if (href === "/dashboard") return false;
+
+    return pathname.startsWith(`${href}/`);
+  };
 
   return (
     <>
@@ -131,9 +142,10 @@ const SidebarContent = ({
         )}
       >
         <Link
-          href="/"
+          href="/dashboard"
           onClick={mobile ? onClose : undefined}
           className="flex min-w-0 items-center gap-3"
+          aria-label="Kreativ Forms dashboard"
         >
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand text-brand-fg shadow-sm">
             <FileText size={18} strokeWidth={2.5} />
@@ -151,7 +163,7 @@ const SidebarContent = ({
             type="button"
             onClick={onClose}
             aria-label="Close sidebar"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-surface-raised hover:text-text"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-surface-raised hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
           >
             <X size={18} />
           </button>
@@ -161,7 +173,7 @@ const SidebarContent = ({
               type="button"
               onClick={onCollapse}
               aria-label="Collapse sidebar"
-              className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-surface-raised hover:text-text md:flex"
+              className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-surface-raised hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand md:flex"
             >
               <ChevronLeft size={17} />
             </button>
@@ -176,7 +188,7 @@ const SidebarContent = ({
             onClick={onExpand}
             title="Expand sidebar"
             aria-label="Expand sidebar"
-            className="flex h-9 w-full items-center justify-center rounded-md text-text-muted transition-colors hover:bg-surface-raised hover:text-text"
+            className="flex h-9 w-full items-center justify-center rounded-md text-text-muted transition-colors hover:bg-surface-raised hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
           >
             <ChevronRight size={18} />
           </button>
@@ -194,7 +206,7 @@ const SidebarContent = ({
           onClick={mobile ? onClose : undefined}
           title={compact && !mobile ? "New Document" : undefined}
           className={cn(
-            "flex w-full items-center justify-center gap-2 rounded-lg bg-brand py-2.5 text-sm font-medium text-brand-fg shadow-sm transition-colors hover:bg-brand-hover",
+            "flex w-full items-center justify-center gap-2 rounded-lg bg-brand py-2.5 text-sm font-medium text-brand-fg shadow-sm transition-colors hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface",
             compact && !mobile ? "md:px-0" : "",
           )}
         >
@@ -203,7 +215,7 @@ const SidebarContent = ({
         </Link>
       </div>
 
-      <div className="custom-scrollbar kui-scrollbar flex-1 space-y-6 overflow-y-auto px-3 py-2">
+      <div className="custom-scrollbar kui-scrollbar flex-1 space-y-6 overflow-y-auto overscroll-contain px-3 py-2">
         <div>
           <AnimatePresence initial={false}>
             {!compact && (
@@ -231,10 +243,10 @@ const SidebarContent = ({
                       title={compact && !mobile ? item.label : undefined}
                       aria-current={active ? "page" : undefined}
                       className={cn(
-                        "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors duration-200",
+                        "flex min-h-10 w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand",
                         active
-                          ? "bg-surface-raised font-medium text-text"
-                          : "text-text-muted hover:bg-surface-muted hover:text-text",
+                          ? "bg-brand/10 font-medium text-brand"
+                          : "text-text-muted hover:bg-surface-raised hover:text-text",
                         compact && !mobile ? "md:justify-center md:px-0" : "",
                       )}
                     >
@@ -271,7 +283,7 @@ const SidebarContent = ({
                   : "Expand collections"
               }
               aria-expanded={isCollectionsOpen}
-              className="flex h-5 w-5 items-center justify-center rounded text-text-muted transition-colors hover:bg-surface-raised hover:text-text"
+              className="flex h-6 w-6 items-center justify-center rounded text-text-muted transition-colors hover:bg-surface-raised hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
             >
               <motion.div
                 animate={{ rotate: isCollectionsOpen ? 0 : -90 }}
@@ -287,6 +299,7 @@ const SidebarContent = ({
               <Link
                 href="/dashboard/collections"
                 title="Collections"
+                aria-label="Collections"
                 className="flex h-9 w-9 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-surface-raised hover:text-text"
               >
                 <FolderClosed size={18} />
@@ -314,7 +327,7 @@ const SidebarContent = ({
                         onClick={mobile ? onClose : undefined}
                         aria-current={active ? "page" : undefined}
                         className={cn(
-                          "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+                          "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand",
                           active
                             ? "bg-surface-raised font-medium text-text"
                             : "text-text-muted hover:bg-surface-raised hover:text-text",
@@ -349,7 +362,7 @@ const SidebarContent = ({
               title={compact && !mobile ? label : undefined}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+                "flex min-h-10 w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand",
                 active
                   ? "bg-surface-raised font-medium text-text"
                   : "text-text-muted hover:bg-surface-raised hover:text-text",
@@ -377,22 +390,80 @@ const Sidebar = ({ isCollapsed = false, setIsCollapsed }: SidebarProps) => {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isCollectionsOpen, setIsCollectionsOpen] = useState(true);
 
+  const mobileSidebarRef = useRef<HTMLElement>(null);
+  const mobileTriggerRef = useRef<HTMLButtonElement>(null);
+
+  const closeMobileSidebar = (restoreFocus = false) => {
+    setIsMobileOpen(false);
+
+    if (restoreFocus) {
+      requestAnimationFrame(() => {
+        mobileTriggerRef.current?.focus();
+      });
+    }
+  };
+
+  // Handle mobile drawer focus, keyboard navigation and body scrolling.
   useEffect(() => {
     if (!isMobileOpen) return;
 
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const sidebar = mobileSidebarRef.current;
+
+    const focusableSelector = [
+      "a[href]",
+      "button:not([disabled])",
+      '[tabindex]:not([tabindex="-1"])',
+    ].join(",");
+
+    const getFocusableElements = () =>
+      Array.from(
+        sidebar?.querySelectorAll<HTMLElement>(focusableSelector) ?? [],
+      ).filter((element) => !element.hasAttribute("disabled"));
+
+    const focusableElements = getFocusableElements();
+
+    focusableElements[0]?.focus();
+
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        setIsMobileOpen(false);
+        event.preventDefault();
+        closeMobileSidebar(true);
+        return;
+      }
+
+      if (event.key !== "Tab") return;
+
+      const elements = getFocusableElements();
+
+      if (!elements.length) {
+        event.preventDefault();
+        return;
+      }
+
+      const first = elements[0];
+      const last = elements[elements.length - 1];
+
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
       }
     };
 
     document.addEventListener("keydown", handleKeyDown);
 
     return () => {
+      document.body.style.overflow = previousOverflow;
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [isMobileOpen]);
 
+  // Close the drawer after route navigation.
   useEffect(() => {
     setIsMobileOpen(false);
   }, [pathname]);
@@ -406,19 +477,22 @@ const Sidebar = ({ isCollapsed = false, setIsCollapsed }: SidebarProps) => {
   return (
     <>
       <button
+        ref={mobileTriggerRef}
         type="button"
         onClick={() => setIsMobileOpen(true)}
         aria-label="Open sidebar"
         aria-expanded={isMobileOpen}
         aria-controls="mobile-sidebar"
-        className="fixed left-4 top-4 z-40 flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-surface text-text shadow-sm md:hidden"
+        className="fixed left-4 top-3 z-60 flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-surface text-text shadow-sm transition-colors hover:bg-surface-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand md:hidden"
       >
         <Menu size={20} />
       </button>
 
-      <div
-        onClick={() => setIsMobileOpen(false)}
-        aria-hidden="true"
+      <button
+        type="button"
+        tabIndex={-1}
+        aria-label="Close navigation menu"
+        onClick={() => closeMobileSidebar()}
         className={cn(
           "fixed inset-0 z-40 bg-black/40 backdrop-blur-[2px] transition-opacity duration-300 md:hidden",
           isMobileOpen
@@ -428,11 +502,13 @@ const Sidebar = ({ isCollapsed = false, setIsCollapsed }: SidebarProps) => {
       />
 
       <aside
+        ref={mobileSidebarRef}
         id="mobile-sidebar"
         aria-label="Mobile navigation"
         aria-hidden={!isMobileOpen}
+        inert={!isMobileOpen}
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex h-screen w-70 shrink-0 flex-col border-r border-border bg-surface font-sans transition-transform duration-300 ease-in-out md:hidden",
+          "fixed inset-y-0 left-0 z-65 flex h-screen w-[min(280px,85vw)] shrink-0 flex-col border-r border-border/70 bg-surface font-sans transition-transform duration-300 ease-in-out md:hidden",
           isMobileOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
@@ -440,14 +516,14 @@ const Sidebar = ({ isCollapsed = false, setIsCollapsed }: SidebarProps) => {
           {...contentProps}
           compact={false}
           mobile
-          onClose={() => setIsMobileOpen(false)}
+          onClose={() => closeMobileSidebar()}
         />
       </aside>
 
       <aside
         aria-label="Desktop navigation"
         className={cn(
-          "sticky top-0 hidden h-screen shrink-0 flex-col border-r border-border bg-surface font-sans transition-[width] duration-300 ease-in-out md:flex",
+          "sticky top-0 hidden h-screen shrink-0 flex-col border-r border-border/70 bg-surface font-sans transition-[width] duration-300 ease-in-out md:flex",
           isCollapsed ? "w-18" : "w-65",
         )}
       >

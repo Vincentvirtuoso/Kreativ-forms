@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -18,11 +18,29 @@ import type {
 } from "pdfjs-dist/types/src/display/api";
 import { AnnotationOverlay } from "./AnnotationOverlay";
 
-import type { AnnotationUpdate } from "../domain/annotation.types";
+import type {
+  Annotation,
+  AnnotationPosition,
+  AnnotationUpdate,
+} from "../domain/annotation.types";
 
-const MIN_SCALE = 0.5;
-const MAX_SCALE = 3;
-const SCALE_STEP = 0.25;
+const MIN_ZOOM = 0.5;
+const MAX_ZOOM = 3;
+const ZOOM_STEP = 0.25;
+
+const FIT_PADDING = 32;
+
+const MAX_CANVAS_PIXELS = 16_000_000;
+
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function touchDistance(touches: React.TouchList) {
+  const a = touches[0];
+  const b = touches[1];
+  return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+}
 
 interface PdfDocumentViewerProps {
   blob: Blob;
@@ -33,6 +51,14 @@ interface PdfDocumentViewerProps {
   pageId: string;
   documentId: string;
   onAnnotationUpdate: (id: string, update: AnnotationUpdate) => void;
+  onAnnotationCreate?: (
+    type: Annotation["type"],
+    position: AnnotationPosition,
+  ) => string | void | Promise<string | void>;
+  onAnnotationChangeType?: (
+    id: string,
+    type: Annotation["type"],
+  ) => Promise<void> | void;
 }
 
 export function PdfDocumentViewer({
@@ -44,19 +70,59 @@ export function PdfDocumentViewer({
   onAnnotationDelete,
   pageId,
   onAnnotationUpdate,
+  onAnnotationCreate,
+  onAnnotationChangeType,
 }: PdfDocumentViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
-  const [scale, setScale] = useState(1);
+  const pinchStartRef = useRef<number | null>(null);
+  const pinchRatioRef = useRef(1);
 
-  const [pageSize, setPageSize] = useState<{
+  const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const [pinchRatio, setPinchRatio] = useState(1);
+
+  const [pageBase, setPageBase] = useState<{
     width: number;
     height: number;
   } | null>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const ready = !!pageBase && containerWidth > 0;
+
+  const fitScale = pageBase
+    ? Math.min(
+        1,
+        Math.max(0.1, (containerWidth - FIT_PADDING) / pageBase.width),
+      )
+    : 1;
+
+  const scale = +(fitScale * zoom).toFixed(4);
+
+  const pageSize = useMemo(
+    () =>
+      pageBase
+        ? { width: pageBase.width * scale, height: pageBase.height * scale }
+        : null,
+    [pageBase, scale],
+  );
+
+  useEffect(() => {
+    const element = scrollRef.current;
+    if (!element) return;
+
+    const update = () => setContainerWidth(element.clientWidth);
+    update();
+
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -67,7 +133,7 @@ export function PdfDocumentViewer({
         setLoading(true);
         setError(null);
         setPdf(null);
-        setPageSize(null);
+        setPageBase(null);
 
         const data = new Uint8Array(await blob.arrayBuffer());
 
@@ -110,7 +176,32 @@ export function PdfDocumentViewer({
   }, [blob, pageCount]);
 
   useEffect(() => {
-    if (!pdf || !canvasRef.current) return;
+    if (!pdf) return;
+
+    let active = true;
+
+    pdf
+      .getPage(pageNumber)
+      .then((page) => {
+        if (!active) return;
+        const viewport = page.getViewport({ scale: 1 });
+        setPageBase({ width: viewport.width, height: viewport.height });
+      })
+      .catch((err) => {
+        if (active) {
+          setError(
+            err instanceof Error ? err.message : "Unable to read PDF page.",
+          );
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [pdf, pageNumber]);
+
+  useEffect(() => {
+    if (!pdf || !ready || !canvasRef.current) return;
 
     let active = true;
     let renderTask: ReturnType<PDFPageProxy["render"]> | undefined;
@@ -129,15 +220,17 @@ export function PdfDocumentViewer({
         }
 
         const viewport = page.getViewport({ scale });
-        const outputScale = window.devicePixelRatio || 1;
+
+        const outputScale = Math.min(
+          window.devicePixelRatio || 1,
+          Math.sqrt(MAX_CANVAS_PIXELS / (viewport.width * viewport.height)),
+        );
 
         canvas.width = Math.floor(viewport.width * outputScale);
         canvas.height = Math.floor(viewport.height * outputScale);
 
         canvas.style.width = `${viewport.width}px`;
         canvas.style.height = `${viewport.height}px`;
-
-        setPageSize({ width: viewport.width, height: viewport.height });
 
         renderTask = page.render({
           canvasContext: context,
@@ -169,7 +262,7 @@ export function PdfDocumentViewer({
       active = false;
       renderTask?.cancel();
     };
-  }, [pdf, pageNumber, scale]);
+  }, [pdf, pageNumber, scale, ready]);
 
   useEffect(() => {
     return () => {
@@ -186,29 +279,62 @@ export function PdfDocumentViewer({
   }
 
   function changeZoom(direction: -1 | 1) {
-    setScale((current) =>
-      Math.min(
-        MAX_SCALE,
-        Math.max(MIN_SCALE, +(current + direction * SCALE_STEP).toFixed(2)),
-      ),
+    setZoom((current) =>
+      clamp(+(current + direction * ZOOM_STEP).toFixed(2), MIN_ZOOM, MAX_ZOOM),
     );
   }
 
+  function handleTouchStart(event: React.TouchEvent<HTMLDivElement>) {
+    if (event.touches.length === 2) {
+      pinchStartRef.current = touchDistance(event.touches);
+    }
+  }
+
+  function handleTouchMove(event: React.TouchEvent<HTMLDivElement>) {
+    if (pinchStartRef.current === null || event.touches.length !== 2) return;
+
+    const ratio = clamp(
+      touchDistance(event.touches) / pinchStartRef.current,
+      MIN_ZOOM / zoom,
+      MAX_ZOOM / zoom,
+    );
+
+    pinchRatioRef.current = ratio;
+    setPinchRatio(ratio);
+  }
+
+  function handleTouchEnd(event: React.TouchEvent<HTMLDivElement>) {
+    if (pinchStartRef.current === null || event.touches.length >= 2) return;
+
+    const ratio = pinchRatioRef.current;
+
+    pinchStartRef.current = null;
+    pinchRatioRef.current = 1;
+
+    setZoom((current) =>
+      clamp(+(current * ratio).toFixed(3), MIN_ZOOM, MAX_ZOOM),
+    );
+    setPinchRatio(1);
+  }
+
+  const iconButton =
+    "rounded-md p-2 hover:bg-surface-raised disabled:opacity-30 pointer-coarse:p-3";
+
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-      <div className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-surface px-4">
-        <div className="flex items-center gap-2">
+      <div className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-surface px-2 sm:px-4 pointer-coarse:h-14">
+        <div className="flex items-center gap-1 sm:gap-2">
           <button
             type="button"
             aria-label="Previous page"
             disabled={loading || pageNumber <= 1}
             onClick={() => changePage(-1)}
-            className="rounded-md p-2 hover:bg-surface-raised disabled:opacity-30"
+            className={iconButton}
           >
             <ChevronLeft size={18} />
           </button>
 
-          <span className="min-w-20 text-center text-sm tabular-nums">
+          <span className="min-w-16 text-center text-sm tabular-nums sm:min-w-20">
             {pageNumber} / {pageCount}
           </span>
 
@@ -217,33 +343,33 @@ export function PdfDocumentViewer({
             aria-label="Next page"
             disabled={loading || pageNumber >= pageCount}
             onClick={() => changePage(1)}
-            className="rounded-md p-2 hover:bg-surface-raised disabled:opacity-30"
+            className={iconButton}
           >
             <ChevronRight size={18} />
           </button>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 sm:gap-2">
           <button
             type="button"
             aria-label="Zoom out"
-            disabled={scale <= MIN_SCALE}
+            disabled={zoom <= MIN_ZOOM}
             onClick={() => changeZoom(-1)}
-            className="rounded-md p-2 hover:bg-surface-raised disabled:opacity-30"
+            className={iconButton}
           >
             <ZoomOut size={17} />
           </button>
 
           <span className="min-w-12 text-center text-xs tabular-nums text-text-muted">
-            {Math.round(scale * 100)}%
+            {Math.round(zoom * 100)}%
           </span>
 
           <button
             type="button"
             aria-label="Zoom in"
-            disabled={scale >= MAX_SCALE}
+            disabled={zoom >= MAX_ZOOM}
             onClick={() => changeZoom(1)}
-            className="rounded-md p-2 hover:bg-surface-raised disabled:opacity-30"
+            className={iconButton}
           >
             <ZoomIn size={17} />
           </button>
@@ -252,7 +378,12 @@ export function PdfDocumentViewer({
 
       <div
         ref={scrollRef}
-        className="relative flex min-h-0 min-w-0 flex-1 overflow-auto bg-surface-sunken"
+        style={{ touchAction: "pan-x pan-y" }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchEnd}
+        className="relative flex min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain bg-surface-sunken"
       >
         {loading && (
           <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
@@ -263,13 +394,19 @@ export function PdfDocumentViewer({
         {error && (
           <div
             role="alert"
-            className="absolute inset-x-0 top-4 z-10 text-center text-sm text-destructive"
+            className="absolute inset-x-0 top-4 z-10 px-4 text-center text-sm text-destructive"
           >
             {error}
           </div>
         )}
 
-        <div className="m-auto shrink-0 p-6">
+        {/* Extra bottom padding keeps the page clear of the annotation toolbar. */}
+        <div
+          className="m-auto shrink-0 p-4 pb-24"
+          style={
+            pinchRatio !== 1 ? { transform: `scale(${pinchRatio})` } : undefined
+          }
+        >
           <div
             className="relative bg-background shadow-lg"
             style={
@@ -283,8 +420,11 @@ export function PdfDocumentViewer({
             <AnnotationOverlay
               pageId={pageId}
               documentId={documentId}
+              scale={scale}
               onUpdate={(id, update) => onAnnotationUpdate(id, update)}
               onDelete={onAnnotationDelete}
+              onCreate={onAnnotationCreate}
+              onChangeType={onAnnotationChangeType}
             />
           </div>
         </div>

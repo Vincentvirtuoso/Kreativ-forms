@@ -2,7 +2,6 @@ import type {
   Annotation,
   AnnotationId,
   AnnotationUpdate,
-  UpdateAnnotationInput,
 } from "../domain/annotation.types";
 
 import type {

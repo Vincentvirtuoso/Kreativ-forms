@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, FileText, ShieldCheck, Zap } from "lucide-react";
+import { ArrowLeft, FilePlus2, FileText, ShieldCheck, Zap } from "lucide-react";
 
 import { DocumentImportForm } from "@/features/documents/import/components/DocumentImportForm";
 
@@ -21,7 +21,20 @@ const benefits = [
   },
 ];
 
-export default function NewDocumentPage() {
+type NewDocumentPageProps = {
+  searchParams: Promise<{ type?: string | string[] }>;
+};
+
+export default async function NewDocumentPage({
+  searchParams,
+}: NewDocumentPageProps) {
+  const { type } = await searchParams;
+  const isBlank = (Array.isArray(type) ? type[0] : type) === "blank";
+
+  if (isBlank) {
+    return <BlankDocumentComingSoon />;
+  }
+
   return (
     <section>
       <div className="mx-auto w-full max-w-6xl">
@@ -107,6 +120,48 @@ export default function NewDocumentPage() {
               </p>
             </div>
           </aside>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function BlankDocumentComingSoon() {
+  return (
+    <section>
+      <div className="mx-auto w-full max-w-6xl">
+        <Link
+          href="/dashboard"
+          className="mb-8 inline-flex items-center gap-2 text-sm text-text-muted transition-colors hover:text-text"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to dashboard
+        </Link>
+
+        <div className="mx-auto max-w-md rounded-2xl border border-dashed border-border bg-surface px-6 py-12 text-center">
+          <div className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-full bg-surface-raised text-text-muted">
+            <FilePlus2 className="h-6 w-6" />
+          </div>
+
+          <span className="inline-flex rounded-full border border-border bg-surface-raised px-2.5 py-1 text-xs font-medium text-text-muted">
+            Coming soon
+          </span>
+
+          <h1 className="mt-4 text-xl font-semibold tracking-tight text-text">
+            Blank documents are on the way
+          </h1>
+
+          <p className="mt-2 text-sm leading-6 text-text-muted">
+            You'll soon be able to start from an empty page. For now, upload a
+            PDF or image and fill it in.
+          </p>
+
+          <Link
+            href="/dashboard/new"
+            className="mt-6 inline-flex items-center justify-center rounded-lg bg-brand px-4 py-2.5 text-sm font-medium text-brand-fg transition-colors hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
+          >
+            Upload a document instead
+          </Link>
         </div>
       </div>
     </section>
