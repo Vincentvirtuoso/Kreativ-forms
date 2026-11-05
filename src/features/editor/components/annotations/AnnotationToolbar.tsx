@@ -1,14 +1,31 @@
+
 "use client";
 
 import { useState } from "react";
+import {
+  CalendarDays,
+  Check,
+  CheckSquare,
+  ChevronDown,
+  PenLine,
+  SlidersHorizontal,
+  Trash2,
+  Type,
+} from "lucide-react";
 
-import { Button } from "@splenddev/kreativ-ui/components";
 import type { Annotation } from "../../domain/annotation.types";
 import {
   TYPE_OPTIONS,
   type AnnotationType,
 } from "../../utils/annotation-overlay.constants";
 import { AnnotationStyleBar } from "./AnnotationStyleBar";
+
+const TYPE_ICONS: Record<AnnotationType, typeof Type> = {
+  text: Type,
+  date: CalendarDays,
+  checkbox: CheckSquare,
+  signature: PenLine,
+};
 
 export function AnnotationToolbar({
   annotation,
@@ -24,7 +41,6 @@ export function AnnotationToolbar({
   canChangeType: boolean;
   canDelete: boolean;
   onChangeType: (type: AnnotationType) => void;
-  /** When provided, a "Style" button opens the style controls. */
   onStyleChange?: (changes: Partial<Annotation["style"]>) => void;
   onDelete: () => void;
   onSign: () => void;
@@ -36,86 +52,175 @@ export function AnnotationToolbar({
     <div
       role="toolbar"
       aria-label="Annotation tools"
-      className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex flex-col items-center gap-2 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+      className="
+        pointer-events-none fixed inset-x-0 bottom-0 z-40
+        flex flex-col items-center gap-2
+        px-3 pb-[max(1rem,env(safe-area-inset-bottom))]
+      "
     >
+      {/* Expanded style controls */}
       {onStyleChange && showStyle && (
         <div
           id="annotation-style-panel"
-          className="pointer-events-auto max-w-full rounded-xl border border-border bg-background shadow-lg"
+          className="
+            pointer-events-auto w-fit max-w-[calc(100vw-1.5rem)]
+            overflow-x-auto
+            rounded-xl border border-border
+            bg-background/95 shadow-2xl backdrop-blur-xl
+            animate-in fade-in slide-in-from-bottom-2 duration-150
+          "
         >
-          <AnnotationStyleBar
-            annotation={annotation}
-            onChange={onStyleChange}
-          />
+          <div className="flex items-center justify-between border-b border-border px-3 py-2">
+            <div className="flex items-center gap-2">
+              <SlidersHorizontal size={13} className="text-text-muted" />
+              <span className="text-xs font-semibold text-text">
+                Appearance
+              </span>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowStyle(false)}
+              aria-label="Close style controls"
+              className="rounded-md p-1 text-text-muted transition-colors hover:bg-surface-raised hover:text-text"
+            >
+              <ChevronDown size={15} />
+            </button>
+          </div>
+
+          <div className="p-2">
+            <AnnotationStyleBar
+              annotation={annotation}
+              onChange={onStyleChange}
+            />
+          </div>
         </div>
       )}
 
-      <div className="pointer-events-auto flex max-w-full items-center gap-1 overflow-x-auto rounded-xl border border-border bg-background p-1.5 shadow-lg">
+      {/* Main toolbar */}
+      <div
+        className="
+          pointer-events-auto flex max-w-full items-center gap-1
+          overflow-x-auto overscroll-x-contain
+          rounded-xl border border-border
+          bg-background/95 p-1.5
+          shadow-[0_8px_40px_rgba(0,0,0,0.14)]
+          backdrop-blur-xl
+        "
+      >
+        {/* Annotation types */}
         {canChangeType && (
-          <div
-            role="group"
-            aria-label="Annotation type"
-            className="flex items-center gap-1"
-          >
-            {TYPE_OPTIONS.map((option) => {
-              const active = annotation.type === option.type;
-              return (
-                <Button
-                  key={option.type}
-                  type="button"
-                  aria-pressed={active}
-                  onClick={() => onChangeType(option.type)}
-                  color={active ? "brand" : "neutral"}
-                  variant={active ? "solid" : "ghost"}
-                >
-                  {option.label}
-                </Button>
-              );
-            })}
-          </div>
-        )}
-
-        {onStyleChange && (
           <>
-            <span className="mx-1 h-6 w-px shrink-0 bg-border" aria-hidden />
-            <Button
-              type="button"
-              aria-expanded={showStyle}
-              aria-controls="annotation-style-panel"
-              onClick={() => setShowStyle((value) => !value)}
-              color="neutral"
-              variant={showStyle ? "soft" : "ghost"}
+            <div
+              role="group"
+              aria-label="Annotation type"
+              className="flex shrink-0 items-center gap-0.5 rounded-lg bg-surface-raised p-1"
             >
-              Style
-            </Button>
+              {TYPE_OPTIONS.map((option) => {
+                const active = annotation.type === option.type;
+                const Icon = TYPE_ICONS[option.type];
+
+                return (
+                  <button
+                    key={option.type}
+                    type="button"
+                    aria-label={option.label}
+                    aria-pressed={active}
+                    title={option.label}
+                    onClick={() => onChangeType(option.type)}
+                    className={`
+                      flex h-8 w-8 shrink-0 items-center justify-center
+                      rounded-md transition-all duration-150
+                      ${
+                        active
+                          ? "bg-background text-text shadow-sm ring-1 ring-border"
+                          : "text-text-muted hover:bg-background/70 hover:text-text"
+                      }
+                    `}
+                  >
+                    <Icon size={15} strokeWidth={1.8} />
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mx-1.5 h-6 w-px shrink-0 bg-border" />
           </>
         )}
 
-        {annotation.type === "signature" && (
-          <>
-            <span className="mx-1 h-6 w-px shrink-0 bg-border" aria-hidden />
-            <Button type="button" onClick={onSign} variant="soft">
-              {annotation.value ? "Redo" : "Sign"}
-            </Button>
-          </>
-        )}
-
-        <span className="mx-1 h-6 w-px shrink-0 bg-border" aria-hidden />
-
-        {canDelete && (
-          <Button
+        {/* Style */}
+        {onStyleChange && (
+          <button
             type="button"
-            onClick={onDelete}
-            variant="ghost"
-            color="destructive"
+            aria-expanded={showStyle}
+            aria-controls="annotation-style-panel"
+            onClick={() => setShowStyle((value) => !value)}
+            className={`
+              flex h-9 shrink-0 items-center gap-2 rounded-lg
+              px-2.5 text-xs font-medium transition-colors
+              ${
+                showStyle
+                  ? "bg-surface-raised text-text"
+                  : "text-text-muted hover:bg-surface-raised hover:text-text"
+              }
+            `}
           >
-            Delete
-          </Button>
+            <SlidersHorizontal size={15} strokeWidth={1.8} />
+            <span>Style</span>
+          </button>
         )}
 
-        <Button type="button" onClick={onDone} variant="ghost" color="brand">
+        {/* Signature */}
+        {annotation.type === "signature" && (
+          <button
+            type="button"
+            onClick={onSign}
+            className="
+              flex h-9 shrink-0 items-center gap-2 rounded-lg
+              px-2.5 text-xs font-medium text-text-muted
+              transition-colors hover:bg-surface-raised hover:text-text
+            "
+          >
+            <PenLine size={15} strokeWidth={1.8} />
+            <span>{annotation.value ? "Redo" : "Sign"}</span>
+          </button>
+        )}
+
+        {/* Delete */}
+        {canDelete && (
+          <>
+            <div className="mx-1 h-6 w-px shrink-0 bg-border" />
+
+            <button
+              type="button"
+              onClick={onDelete}
+              aria-label="Delete annotation"
+              title="Delete annotation"
+              className="
+                flex h-9 w-9 shrink-0 items-center justify-center
+                rounded-lg text-text-muted transition-colors
+                hover:bg-red-500/10 hover:text-red-500
+              "
+            >
+              <Trash2 size={15} strokeWidth={1.8} />
+            </button>
+          </>
+        )}
+
+        {/* Done */}
+        <button
+          type="button"
+          onClick={onDone}
+          className="
+            flex h-9 shrink-0 items-center gap-2 rounded-lg
+            bg-brand px-3.5 text-xs font-semibold text-white
+            shadow-sm transition-all
+            hover:brightness-110 active:scale-[0.97]
+          "
+        >
+          <Check size={15} strokeWidth={2} />
           Done
-        </Button>
+        </button>
       </div>
     </div>
   );
