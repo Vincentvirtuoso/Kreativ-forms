@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useRef, useState } from "react";
@@ -24,6 +25,11 @@ interface SignaturePadProps {
   onCancel: () => void;
 }
 
+const CANVAS_WIDTH = 1600;
+const CANVAS_HEIGHT = 480;
+const STROKE_WIDTH = 4.5;
+const INK_COLOR = "#111827";
+
 export function SignaturePad({
   initialValue,
   onSave,
@@ -38,22 +44,85 @@ export function SignaturePad({
 
   const [hasDrawing, setHasDrawing] = useState(false);
 
+  const configureContext = (
+    context: CanvasRenderingContext2D,
+  ) => {
+    context.strokeStyle = INK_COLOR;
+    context.fillStyle = INK_COLOR;
+    context.lineWidth = STROKE_WIDTH;
+    context.lineCap = "round";
+    context.lineJoin = "round";
+    context.imageSmoothingEnabled = true;
+  };
+
+  // Draw smooth quadratic curves instead of connected straight lines.
+  function drawSmoothStroke(
+    context: CanvasRenderingContext2D,
+    points: SignatureStroke,
+  ) {
+    if (!points.length) return;
+
+    context.beginPath();
+
+    const first = points[0];
+
+    if (points.length === 1) {
+      context.arc(first.x, first.y, STROKE_WIDTH / 2, 0, Math.PI * 2);
+      context.fill();
+      return;
+    }
+
+    context.moveTo(first.x, first.y);
+
+    for (let i = 1; i < points.length - 1; i++) {
+      const current = points[i];
+      const next = points[i + 1];
+
+      const midX = (current.x + next.x) / 2;
+      const midY = (current.y + next.y) / 2;
+
+      context.quadraticCurveTo(
+        current.x,
+        current.y,
+        midX,
+        midY,
+      );
+    }
+
+    const last = points[points.length - 1];
+
+    context.lineTo(last.x, last.y);
+    context.stroke();
+  }
+
+  function redrawCanvas() {
+    const canvas = canvasRef.current;
+    const context = canvas?.getContext("2d");
+
+    if (!canvas || !context) return;
+
+    context.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    configureContext(context);
+
+    for (const stroke of strokesRef.current) {
+      drawSmoothStroke(context, stroke);
+    }
+  }
+
   useEffect(() => {
     const canvas = canvasRef.current;
     const context = canvas?.getContext("2d");
 
     if (!canvas || !context) return;
 
-    context.strokeStyle = "#111827";
-    context.lineWidth = 2.5;
-    context.lineCap = "round";
-    context.lineJoin = "round";
-
-    context.clearRect(0, 0, canvas.width, canvas.height);
-
     strokesRef.current = [];
     currentStrokeRef.current = null;
+    drawingRef.current = false;
     hasInitialImageRef.current = false;
+
+    context.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    configureContext(context);
+
     setHasDrawing(false);
 
     if (!initialValue) return;
@@ -61,8 +130,14 @@ export function SignaturePad({
     const image = new Image();
 
     image.onload = () => {
-      context.clearRect(0, 0, canvas.width, canvas.height);
-      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      context.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      context.drawImage(
+        image,
+        0,
+        0,
+        CANVAS_WIDTH,
+        CANVAS_HEIGHT,
+      );
 
       hasInitialImageRef.current = true;
       setHasDrawing(true);
@@ -73,53 +148,83 @@ export function SignaturePad({
     };
 
     image.src = initialValue;
+
+    return () => {
+      image.onload = null;
+      image.onerror = null;
+    };
   }, [initialValue]);
 
-  function getPosition(event: ReactPointerEvent<HTMLCanvasElement>) {
+  function getPosition(
+    event: ReactPointerEvent<HTMLCanvasElement>,
+  ): SignaturePoint {
     const canvas = canvasRef.current!;
     const bounds = canvas.getBoundingClientRect();
 
     return {
-      x: ((event.clientX - bounds.left) / bounds.width) * canvas.width,
-      y: ((event.clientY - bounds.top) / bounds.height) * canvas.height,
+      x:
+        ((event.clientX - bounds.left) / bounds.width) *
+        CANVAS_WIDTH,
+      y:
+        ((event.clientY - bounds.top) / bounds.height) *
+        CANVAS_HEIGHT,
     };
   }
 
-  function createSignatureSvg(
-    strokes: SignatureStroke[],
-    width: number,
-    height: number,
-  ): string {
-    const paths = strokes
+  function createSignatureSvg(): string {
+    const paths = strokesRef.current
       .filter((stroke) => stroke.length > 0)
-      .map((stroke) => {
-        const [first, ...rest] = stroke;
+      .map((points) => {
+        const first = points[0];
 
-        const d = [
-          `M ${first.x} ${first.y}`,
-          ...rest.map((point) => `L ${point.x} ${point.y}`),
-        ].join(" ");
+        if (points.length === 1) {
+          return `<circle cx="${first.x}" cy="${first.y}" r="${STROKE_WIDTH / 2}" fill="${INK_COLOR}"/>`;
+        }
 
-        return `<path d="${d}" fill="none" stroke="#111827" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>`;
+        let d = `M ${first.x} ${first.y}`;
+
+        for (let i = 1; i < points.length - 1; i++) {
+          const current = points[i];
+          const next = points[i + 1];
+
+          const midX = (current.x + next.x) / 2;
+          const midY = (current.y + next.y) / 2;
+
+          d += ` Q ${current.x} ${current.y} ${midX} ${midY}`;
+        }
+
+        const last = points[points.length - 1];
+
+        d += ` L ${last.x} ${last.y}`;
+
+        return `<path d="${d}" fill="none" stroke="${INK_COLOR}" stroke-width="${STROKE_WIDTH}" stroke-linecap="round" stroke-linejoin="round"/>`;
       })
       .join("");
 
-    return [
-      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">`,
-      paths,
-      "</svg>",
-    ].join("");
+    return `
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="${CANVAS_WIDTH}"
+        height="${CANVAS_HEIGHT}"
+        viewBox="0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}"
+      >
+        ${paths}
+      </svg>
+    `.trim();
   }
 
-  function startDrawing(event: ReactPointerEvent<HTMLCanvasElement>) {
+  function startDrawing(
+    event: ReactPointerEvent<HTMLCanvasElement>,
+  ) {
     const canvas = canvasRef.current;
-    const context = canvas?.getContext("2d");
 
-    if (!canvas || !context) return;
+    if (!canvas) return;
 
     event.preventDefault();
 
     drawingRef.current = true;
+    hasInitialImageRef.current = false;
+
     canvas.setPointerCapture(event.pointerId);
 
     const point = getPosition(event);
@@ -128,31 +233,39 @@ export function SignaturePad({
     strokesRef.current.push(stroke);
     currentStrokeRef.current = stroke;
 
-    context.beginPath();
-    context.moveTo(point.x, point.y);
-    context.lineTo(point.x + 0.1, point.y + 0.1);
-    context.stroke();
-
+    redrawCanvas();
     setHasDrawing(true);
   }
 
   function draw(event: ReactPointerEvent<HTMLCanvasElement>) {
     if (!drawingRef.current) return;
 
-    const canvas = canvasRef.current;
-    const context = canvas?.getContext("2d");
-
-    if (!canvas || !context) return;
+    event.preventDefault();
 
     const point = getPosition(event);
+    const stroke = currentStrokeRef.current;
 
-    currentStrokeRef.current?.push(point);
+    if (!stroke) return;
 
-    context.lineTo(point.x, point.y);
-    context.stroke();
+    const previous = stroke[stroke.length - 1];
+
+    // Ignore extremely small pointer movements.
+    const distance = Math.hypot(
+      point.x - previous.x,
+      point.y - previous.y,
+    );
+
+    if (distance < 1.2) return;
+
+    stroke.push(point);
+
+    // Re-render using smooth curves.
+    redrawCanvas();
   }
 
-  function stopDrawing(event: ReactPointerEvent<HTMLCanvasElement>) {
+  function stopDrawing(
+    event: ReactPointerEvent<HTMLCanvasElement>,
+  ) {
     drawingRef.current = false;
     currentStrokeRef.current = null;
 
@@ -167,10 +280,11 @@ export function SignaturePad({
 
     if (!canvas || !context) return;
 
-    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
     strokesRef.current = [];
     currentStrokeRef.current = null;
+    drawingRef.current = false;
     hasInitialImageRef.current = false;
 
     setHasDrawing(false);
@@ -184,10 +298,9 @@ export function SignaturePad({
     const png = canvas.toDataURL("image/png");
 
     if (onSaveDrawing) {
-      const svg =
-        !hasInitialImageRef.current && strokesRef.current.length > 0
-          ? createSignatureSvg(strokesRef.current, canvas.width, canvas.height)
-          : undefined;
+      const svg = !hasInitialImageRef.current
+        ? createSignatureSvg()
+        : undefined;
 
       onSaveDrawing({ png, svg });
       return;
@@ -198,24 +311,32 @@ export function SignaturePad({
 
   return (
     <div className="space-y-3">
-      <canvas
-        ref={canvasRef}
-        width={1200}
-        height={360}
-        aria-label="Draw your signature"
-        className="w-full touch-none rounded-md border border-border bg-white"
-        onPointerDown={startDrawing}
-        onPointerMove={draw}
-        onPointerUp={stopDrawing}
-        onPointerCancel={stopDrawing}
-        onLostPointerCapture={() => {
-          drawingRef.current = false;
-          currentStrokeRef.current = null;
-        }}
-      />
+      <div className="overflow-hidden rounded-lg border border-border bg-white">
+        <canvas
+          ref={canvasRef}
+          width={CANVAS_WIDTH}
+          height={CANVAS_HEIGHT}
+          aria-label="Draw your signature"
+          className="block w-full touch-none"
+          style={{ aspectRatio: "10 / 3" }}
+          onPointerDown={startDrawing}
+          onPointerMove={draw}
+          onPointerUp={stopDrawing}
+          onPointerCancel={stopDrawing}
+          onLostPointerCapture={() => {
+            drawingRef.current = false;
+            currentStrokeRef.current = null;
+          }}
+        />
+      </div>
 
-      <div className="flex justify-between">
-        <Button type="button" variant="ghost" onClick={clear} color="neutral">
+      <div className="flex items-center justify-between">
+        <Button
+          type="button"
+          variant="ghost"
+          color="neutral"
+          onClick={clear}
+        >
           <Eraser size={15} />
           Clear
         </Button>
@@ -231,7 +352,11 @@ export function SignaturePad({
             Cancel
           </Button>
 
-          <Button type="button" disabled={!hasDrawing} onClick={handleSave}>
+          <Button
+            type="button"
+            disabled={!hasDrawing}
+            onClick={handleSave}
+          >
             <Check size={15} />
             Use signature
           </Button>
