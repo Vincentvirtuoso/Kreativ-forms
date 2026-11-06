@@ -8,6 +8,7 @@ import type { DocumentLoaderService } from "./document-loader.service";
 import type { AnnotationRepository } from "@/features/editor/repositories/annotation.repository";
 import type { HandwritingProfileRepository } from "@/features/handwriting/repositories/handwriting-profile.repository";
 import type { HandwritingProfile } from "@/features/handwriting/domain/handwriting-profile.types";
+import { getHandwritingFontFamily } from "@/features/handwriting/services/handwriting-font-loader.service";
 
 type PdfFont = Awaited<ReturnType<PDFDocument["embedFont"]>>;
 
@@ -94,7 +95,7 @@ export class PdfExportService {
         boldFont,
       );
 
-      this.renderAnnotation(page, annotation, font);
+      await this.renderAnnotation(page, annotation, font);
     }
 
     const bytes = await pdf.save();
@@ -151,31 +152,41 @@ export class PdfExportService {
       const profileId = family.replace("KreativHandwriting-", "");
 
       const profile = profiles.find(
-        (item) => item.id === profileId && item.status === "ready",
+        (item) =>
+          getHandwritingFontFamily(item.id) === family &&
+          item.status === "ready",
       );
 
       if (!profile?.fontBlob) {
-        throw new Error(`The handwriting font "${family}" could not be found.`);
+        throw new Error(
+          `The handwriting font "${family}" could not be found or has no generated font data.`,
+        );
       }
 
       const cached = cache.get(profile.id);
 
       if (cached) return cached;
 
-      const embedded = await pdf.embedFont(
-        new Uint8Array(await profile.fontBlob.arrayBuffer()),
-        { subset: true },
-      );
+      const fontBytes = new Uint8Array(await profile.fontBlob.arrayBuffer());
 
-      cache.set(profile.id, embedded);
+      try {
+        const embedded = await pdf.embedFont(fontBytes, {
+          subset: false,
+        });
 
-      return embedded;
+        cache.set(profile.id, embedded);
+
+        return embedded;
+      } catch (error) {
+        console.error("Custom PDF font embedding failed:", error);
+        throw error;
+      }
     }
 
     return annotation.style.fontWeight === "bold" ? bold : regular;
   }
 
-  private renderAnnotation(
+  private async renderAnnotation(
     page: ReturnType<PDFDocument["getPages"]>[number],
     annotation: Annotation,
     font: PdfFont,
@@ -251,7 +262,7 @@ export class PdfExportService {
 
       case "signature": {
         if (annotation.value) {
-          void this.drawSignature(page, annotation.value, rect, opacity);
+          await this.drawSignature(page, annotation.value, rect, opacity);
         }
         break;
       }
