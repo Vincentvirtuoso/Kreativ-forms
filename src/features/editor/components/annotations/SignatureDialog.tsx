@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Check, PenLine, X } from "lucide-react";
 import { Button } from "@splenddev/kreativ-ui/components";
 
-import { SignaturePad } from "../SignaturePad";
+import { SignaturePad, type SignatureDrawing } from "./SignaturePad";
 import type { SignatureAsset } from "@/features/assets/domain/signature.types";
 import { signatureService } from "@/features/assets/services";
 
@@ -14,24 +14,44 @@ interface SignatureDialogProps {
   portalRoot: HTMLElement | null;
   initialValue?: string | null;
   onSave: (value: string) => void;
+  /** When provided, drawn signatures arrive as PNG + SVG instead of via onSave. */
+  onSaveDrawing?: (drawing: SignatureDrawing) => void;
   onClose: () => void;
 }
 
 type DialogMode = "saved" | "draw";
+
+/** Output pixels per SVG unit when rasterizing a saved SVG signature. */
+const RASTER_SCALE = 3;
+const MAX_RASTER_SIDE = 4096;
 
 export function SignatureDialog({
   open,
   portalRoot,
   initialValue,
   onSave,
+  onSaveDrawing,
   onClose,
 }: SignatureDialogProps) {
   const [mode, setMode] = useState<DialogMode>(initialValue ? "draw" : "saved");
   const [signatures, setSignatures] = useState<SignatureAsset[]>([]);
+  const [draftDrawing, setDraftDrawing] = useState<SignatureDrawing | null>(
+    null,
+  );
+  const [signatureName, setSignatureName] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Keep the latest onClose without making it an effect dependency. Callers
+  // usually pass an inline function, which would otherwise reset the tab,
+  // clear the selection and refetch signatures on every parent render.
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   const loadSignatures = useCallback(async () => {
     try {
@@ -55,7 +75,7 @@ export function SignatureDialog({
     void loadSignatures();
 
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") onCloseRef.current();
     }
 
     window.addEventListener("keydown", handleKeyDown);
@@ -63,7 +83,7 @@ export function SignatureDialog({
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [open, initialValue, loadSignatures, onClose]);
+  }, [open, initialValue, loadSignatures]);
 
   async function handleUseSavedSignature() {
     if (!selectedId) return;
@@ -80,6 +100,29 @@ export function SignatureDialog({
       onSave(value);
     } catch {
       setError("Unable to use this signature.");
+    } finally {
+      setSaving(false);
+    }
+  }
+  async function handleSaveToLibrary() {
+    if (!draftDrawing || !signatureName.trim()) return;
+
+    try {
+      setSaving(true);
+      setError(null);
+
+      const signature = await signatureService.createFromDrawing(
+        signatureName.trim(),
+        draftDrawing,
+      );
+
+      setSignatures((current) => [signature, ...current]);
+      setSelectedId(signature.id);
+      setDraftDrawing(null);
+      setSignatureName("");
+      setMode("saved");
+    } catch {
+      setError("Unable to save this signature.");
     } finally {
       setSaving(false);
     }
@@ -206,11 +249,59 @@ export function SignatureDialog({
             )}
           </div>
         ) : (
-          <SignaturePad
-            initialValue={initialValue}
-            onSave={onSave}
-            onCancel={onClose}
-          />
+          <>
+            <SignaturePad
+              initialValue={initialValue}
+              onSave={onSave}
+              onSaveDrawing={onSaveDrawing}
+              onCancel={onClose}
+              onSaveToLibrary={(drawing) => {
+                setDraftDrawing(drawing);
+                setSignatureName("My signature");
+              }}
+            />
+            {draftDrawing && (
+              <div className="space-y-3 rounded-lg border border-border p-3">
+                <div>
+                  <label
+                    htmlFor="signature-name"
+                    className="text-xs font-medium text-text"
+                  >
+                    Signature name
+                  </label>
+
+                  <input
+                    id="signature-name"
+                    value={signatureName}
+                    onChange={(event) => setSignatureName(event.target.value)}
+                    placeholder="e.g. Personal signature"
+                    maxLength={60}
+                    className="mt-1 h-10 w-full rounded-md border border-border bg-surface px-3 text-sm outline-none focus:border-brand"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    color="neutral"
+                    onClick={() => setDraftDrawing(null)}
+                  >
+                    Cancel
+                  </Button>
+
+                  <Button
+                    type="button"
+                    disabled={!signatureName.trim() || saving}
+                    isLoading={saving}
+                    onClick={() => void handleSaveToLibrary()}
+                  >
+                    Save signature
+                  </Button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>,
@@ -300,9 +391,18 @@ async function signatureToDataUrl(signature: SignatureAsset): Promise<string> {
       image.src = objectUrl;
     });
 
+    // Use the SVG's own proportions. A fixed 1200x360 canvas would stretch
+    // tightly cropped signatures.
+    const naturalWidth = image.naturalWidth || 1600;
+    const naturalHeight = image.naturalHeight || 480;
+    const scale = Math.min(
+      RASTER_SCALE,
+      MAX_RASTER_SIDE / Math.max(naturalWidth, naturalHeight),
+    );
+
     const canvas = document.createElement("canvas");
-    canvas.width = 1200;
-    canvas.height = 360;
+    canvas.width = Math.round(naturalWidth * scale);
+    canvas.height = Math.round(naturalHeight * scale);
 
     const context = canvas.getContext("2d");
 
@@ -310,6 +410,7 @@ async function signatureToDataUrl(signature: SignatureAsset): Promise<string> {
       throw new Error("Canvas is unavailable.");
     }
 
+    context.imageSmoothingQuality = "high";
     context.drawImage(image, 0, 0, canvas.width, canvas.height);
 
     return canvas.toDataURL("image/png");

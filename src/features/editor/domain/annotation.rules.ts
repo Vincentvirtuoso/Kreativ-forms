@@ -1,8 +1,8 @@
 import type { Annotation, AnnotationPosition } from "./annotation.types";
 
 export const ANNOTATION_RULES = {
-  minWidth: 12,
-  minHeight: 12,
+  minWidth: 4,
+  minHeight: 4,
   maxWidth: 100,
   maxHeight: 100,
   maxTextLength: 10_000,

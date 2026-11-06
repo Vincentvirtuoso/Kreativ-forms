@@ -17,27 +17,27 @@ export class DashboardDocumentService {
   ) {}
 
   private async findRepository(id: string) {
-  const [local, session] = await Promise.all([
-    this.localDocuments.getById(id),
-    this.sessionDocuments.getById(id),
-  ]);
+    const [local, session] = await Promise.all([
+      this.localDocuments.getById(id),
+      this.sessionDocuments.getById(id),
+    ]);
 
-  if (local) {
-    return {
-      document: local,
-      repository: this.localDocuments,
-    };
+    if (local) {
+      return {
+        document: local,
+        repository: this.localDocuments,
+      };
+    }
+
+    if (session) {
+      return {
+        document: session,
+        repository: this.sessionDocuments,
+      };
+    }
+
+    throw new Error(`Document "${id}" could not be found.`);
   }
-
-  if (session) {
-    return {
-      document: session,
-      repository: this.sessionDocuments,
-    };
-  }
-
-  throw new Error(`Document "${id}" could not be found.`);
-}
 
   private toDashboardDocument(document: Document): DashboardDocument {
     return {
@@ -78,19 +78,8 @@ export class DashboardDocumentService {
       this.sessionDocuments.getTrash(),
     ]);
 
-    const documents = new Map<string, Document>();
-
-    for (const document of [...local, ...session]) {
-      if (document.deletedAt) {
-        documents.set(document.id, document);
-      }
-    }
-
-    return [...documents.values()]
-      .sort(
-        (a, b) =>
-          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
-      )
+    return [...local, ...session]
+      .filter((document) => Boolean(document.deletedAt))
       .map((document) => this.toDashboardDocument(document));
   }
 
@@ -115,23 +104,21 @@ export class DashboardDocumentService {
   }
 
   async permanentlyDelete(id: string): Promise<void> {
-  const [local, session] = await Promise.all([
-    this.localDocuments.getById(id),
-    this.sessionDocuments.getById(id),
-  ]);
+    const [local, session] = await Promise.all([
+      this.localDocuments.getById(id),
+      this.sessionDocuments.getById(id),
+    ]);
 
-  const target = local?.deletedAt
-    ? this.localDocuments
-    : session?.deletedAt
-      ? this.sessionDocuments
-      : null;
+    const target = local?.deletedAt
+      ? this.localDocuments
+      : session?.deletedAt
+        ? this.sessionDocuments
+        : null;
 
-  if (!target) {
-    throw new Error(
-      "This document could not be found in Trash. Refresh and try again.",
-    );
+    if (!target) {
+      throw new Error(`Document not found in Trash. ID: ${id}`);
+    }
+
+    await target.permanentlyDelete(id);
   }
-
-  await target.permanentlyDelete(id);
-}
 }

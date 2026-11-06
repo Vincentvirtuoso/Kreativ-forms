@@ -11,7 +11,7 @@ import Link, { type LinkProps } from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronDown, HelpCircle, Moon, Settings, Sun } from "lucide-react";
 
-import { Button, Switch, useTheme } from "@splenddev/kreativ-ui";
+import { Button, Switch, ThemeToggler, useTheme } from "@splenddev/kreativ-ui";
 import { useSettings } from "@/features/settings/providers/settings-provider";
 
 const WORKSPACE_LABEL = "Personal workspace";
@@ -120,7 +120,7 @@ export default function UserMenu() {
   };
 
   return (
-    <div ref={menuRef} className="relative z-50">
+    <div ref={menuRef} className="relative z-99">
       <button
         ref={buttonRef}
         type="button"
@@ -241,12 +241,7 @@ export default function UserMenu() {
                     </p>
                   </div>
                 </div>
-
-                <Switch
-                  checked={isDark}
-                  onCheckedChange={() => setMode(isDark ? "light" : "dark")}
-                  size="md"
-                />
+                <ThemeToggler iconOnly size="xs" rounded />
               </div>
             </div>
 

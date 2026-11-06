@@ -7,9 +7,9 @@ export const semanticTokens = {
       dark: "{colors.neutral.950}",
     },
 
-    brand: { light: "{colors.blue.500}", dark: "{colors.blue.400}" },
+    brand: { light: "{colors.violet.500}", dark: "{colors.violet.400}" },
 
-    brandHover: { light: "{colors.blue.600}", dark: "{colors.blue.300}" },
+    brandHover: { light: "{colors.violet.600}", dark: "{colors.violet.300}" },
 
     brandFg: "{colors.white}",
 

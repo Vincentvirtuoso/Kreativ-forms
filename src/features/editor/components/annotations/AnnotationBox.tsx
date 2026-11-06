@@ -1,4 +1,3 @@
-
 "use client";
 
 import type {
@@ -8,6 +7,7 @@ import type {
 import { AnnotationContent } from "./AnnotationContent";
 import { BASE_FONT_SIZE } from "../../utils/annotation-overlay.constants";
 import type { ResizeHandle } from "../../utils/annotation-geometry";
+import { cn } from "@/lib/cn";
 
 const TYPE_LABEL: Record<Annotation["type"], string> = {
   text: "Text",
@@ -23,23 +23,22 @@ const CORNER_HANDLES: Record<"nw" | "ne" | "sw" | "se", string> = {
   se: "bottom-0 right-0 translate-x-1/2 translate-y-1/2 cursor-nwse-resize",
 };
 
-const EDGE_HANDLES: Record<
-  "n" | "s" | "e" | "w",
-  string
-> = {
-  n: "left-1/2 top-0 h-2 w-8 -translate-x-1/2 -translate-y-1/2 cursor-ns-resize",
-  s: "bottom-0 left-1/2 h-2 w-8 -translate-x-1/2 translate-y-1/2 cursor-ns-resize",
-  w: "left-0 top-1/2 h-8 w-2 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize",
-  e: "right-0 top-1/2 h-8 w-2 translate-x-1/2 -translate-y-1/2 cursor-ew-resize",
+const EDGE_HANDLES: Record<"n" | "s" | "e" | "w", string> = {
+  n: "left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 cursor-ns-resize",
+  s: "bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 cursor-ns-resize",
+  w: "left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize",
+  e: "right-0 top-1/2 translate-x-1/2 -translate-y-1/2 cursor-ew-resize",
+};
+const EDGE_HANDLES_SIZES: Record<"n" | "s" | "e" | "w", string> = {
+  n: "l h-2 w-7",
+  s: "h-2 w-7",
+  w: "h-7 w-2",
+  e: "h-7 w-2",
 };
 
-const CORNERS = Object.keys(CORNER_HANDLES) as (
-  keyof typeof CORNER_HANDLES
-)[];
+const CORNERS = Object.keys(CORNER_HANDLES) as (keyof typeof CORNER_HANDLES)[];
 
-const EDGES = Object.keys(EDGE_HANDLES) as (
-  keyof typeof EDGE_HANDLES
-)[];
+const EDGES = Object.keys(EDGE_HANDLES) as (keyof typeof EDGE_HANDLES)[];
 
 interface AnnotationBoxProps {
   annotation: Annotation;
@@ -48,6 +47,7 @@ interface AnnotationBoxProps {
   disabled: boolean;
   scale: number;
   dragging?: "move" | "resize" | null;
+  preview?: boolean;
   onPointerDown: (
     event: React.PointerEvent<HTMLElement>,
     mode: "move" | "resize",
@@ -61,24 +61,27 @@ interface AnnotationBoxProps {
 export function AnnotationBox({
   annotation,
   position,
-  selected,
+  selected: selectedProp,
   disabled,
   scale,
   dragging = null,
+  preview = false,
   onPointerDown,
   onKeyDown,
   onChange,
   onRequestSign,
 }: AnnotationBoxProps) {
-  const fontSize =
-    (annotation.style.fontSize ?? BASE_FONT_SIZE) * scale;
+  const selected = selectedProp && !preview;
+
+  if (preview && isEmptyInPreview(annotation)) return null;
+
+  const fontSize = (annotation.style.fontSize ?? BASE_FONT_SIZE) * scale;
 
   const editable = selected && !disabled;
   const isCheckbox = annotation.type === "checkbox";
 
   const showMoveGrip =
-    editable &&
-    (annotation.type === "text" || annotation.type === "date");
+    editable && (annotation.type === "text" || annotation.type === "date");
 
   const labelBelow = position.y < 6;
 
@@ -98,7 +101,7 @@ export function AnnotationBox({
         top: `${position.y}%`,
         width: `${position.width}%`,
         height: `${position.height}%`,
-        zIndex: selected ? 20 : 1,
+        zIndex: selected ? 15 : 1,
         touchAction: "none",
       }}
       className={[
@@ -116,21 +119,23 @@ export function AnnotationBox({
         "focus-visible:ring-1 focus-visible:ring-brand focus-visible:ring-offset-1",
       ].join(" ")}
     >
-      {/* Annotation content */}
       <div
         style={{
           fontSize,
           fontFamily: annotation.style.fontFamily ?? "inherit",
+          fontWeight: annotation.style.fontWeight ?? "normal",
           color: annotation.style.color ?? "#111827",
-          textAlign: annotation.style.textAlign ?? "left",
+          textAlign: annotation.style.textAlign ?? "right",
+
           backgroundColor: isCheckbox
             ? "transparent"
-            : (
-                annotation.style.backgroundColor ??
-                "rgba(59,130,246,0.04)"
-              ),
+            : (annotation.style.backgroundColor ?? "rgba(59,130,246,0.04)"),
+
           borderColor: annotation.style.borderColor ?? "transparent",
           borderWidth: annotation.style.borderWidth ?? 0,
+          borderStyle: annotation.style.borderStyle ?? "solid",
+          borderRadius: annotation.style.borderRadius ?? 0,
+          opacity: annotation.style.opacity ?? 1,
         }}
         className="absolute inset-0 flex items-center overflow-hidden"
       >
@@ -148,19 +153,17 @@ export function AnnotationBox({
         </div>
       </div>
 
-      {/* Required indicator */}
       {annotation.required && selected && (
         <span
-          className="pointer-events-none absolute -right-1 -top-1 z-30 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white"
+          className="pointer-events-none absolute -right-1 -top-1 z-8 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white"
           aria-label="Required"
         />
       )}
 
-      {/* Contextual selection toolbar */}
       {editable && (
         <div
           className={[
-            "pointer-events-none absolute left-0 z-30",
+            "pointer-events-none absolute left-0 z-10",
             "flex items-center gap-2",
             "whitespace-nowrap rounded-md border border-border",
             "bg-background/95 px-2 py-1 shadow-lg backdrop-blur-sm",
@@ -176,17 +179,14 @@ export function AnnotationBox({
           {annotation.required && (
             <>
               <span className="h-3 w-px bg-border" />
-              <span className="text-[10px] text-text-muted">
-                Required
-              </span>
+              <span className="text-[10px] text-text-muted">Required</span>
             </>
           )}
         </div>
       )}
 
-      {/* Live measurement */}
       {editable && isInteracting && (
-        <div className="pointer-events-none absolute left-1/2 top-full z-40 mt-3 -translate-x-1/2">
+        <div className="pointer-events-none absolute left-1/2 top-full z-5 mt-3 -translate-x-1/2">
           <div className="whitespace-nowrap rounded-md border border-border bg-background px-2.5 py-1.5 text-[10px] font-medium tabular-nums text-text shadow-lg">
             {dragging === "resize"
               ? `${position.width.toFixed(1)}% × ${position.height.toFixed(1)}%`
@@ -195,7 +195,6 @@ export function AnnotationBox({
         </div>
       )}
 
-      {/* Move grip */}
       {showMoveGrip && (
         <button
           type="button"
@@ -203,7 +202,7 @@ export function AnnotationBox({
           aria-label="Move annotation"
           onPointerDown={(event) => onPointerDown(event, "move")}
           className={[
-            "absolute left-0 top-0 z-40",
+            "absolute left-0 top-0 z-5",
             "h-2 w-2 -translate-x-1/2 -translate-y-1/2",
             "cursor-move border border-brand bg-background",
             "shadow-sm",
@@ -213,40 +212,41 @@ export function AnnotationBox({
         />
       )}
 
-      {/* Edge resize handles */}
-      {editable && !isCheckbox &&
+      {editable &&
+        !isCheckbox &&
         EDGES.map((handle) => (
           <button
             key={handle}
             type="button"
             tabIndex={-1}
             aria-label={`Resize ${handle} edge`}
-            onPointerDown={(event) =>
-              onPointerDown(event, "resize", handle)
-            }
-            className={[
-              "absolute z-40 flex items-center justify-center",
+            onPointerDown={(event) => onPointerDown(event, "resize", handle)}
+            className={cn(
+              "absolute z-5 flex items-center justify-center",
               EDGE_HANDLES[handle],
               "before:absolute before:-inset-2 before:content-['']",
-            ].join(" ")}
+            )}
           >
-            <span className="h-1 w-4 rounded-full border border-brand/60 bg-background shadow-sm" />
+            <span
+              className={cn(
+                "rounded-full border border-brand/60 bg-background shadow-sm",
+                EDGE_HANDLES_SIZES[handle],
+              )}
+            />
           </button>
         ))}
 
-      {/* Corner resize handles */}
-      {editable && !isCheckbox &&
+      {editable &&
+        !isCheckbox &&
         CORNERS.map((handle) => (
           <button
             key={handle}
             type="button"
             tabIndex={-1}
             aria-label={`Resize ${handle} corner`}
-            onPointerDown={(event) =>
-              onPointerDown(event, "resize", handle)
-            }
+            onPointerDown={(event) => onPointerDown(event, "resize", handle)}
             className={[
-              "absolute z-50",
+              "absolute z-10",
               "h-2 w-2 border border-brand",
               "bg-background shadow-sm",
               "before:absolute before:-inset-2 before:content-['']",
@@ -257,4 +257,15 @@ export function AnnotationBox({
         ))}
     </div>
   );
+}
+
+function isEmptyInPreview(annotation: Annotation) {
+  switch (annotation.type) {
+    case "text":
+    case "date":
+    case "signature":
+      return !annotation.value;
+    case "checkbox":
+      return !annotation.checked;
+  }
 }

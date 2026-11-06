@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState } from "react";
@@ -19,6 +18,8 @@ import {
   type AnnotationType,
 } from "../../utils/annotation-overlay.constants";
 import { AnnotationStyleBar } from "./AnnotationStyleBar";
+import { Button } from "@splenddev/kreativ-ui";
+import { useAnnotationStore } from "../../stores/useAnnotationStore";
 
 const TYPE_ICONS: Record<AnnotationType, typeof Type> = {
   text: Type,
@@ -48,12 +49,18 @@ export function AnnotationToolbar({
 }) {
   const [showStyle, setShowStyle] = useState(false);
 
+  const beginHistoryGroup = useAnnotationStore(
+    (state) => state.beginHistoryGroup,
+  );
+
+  const endHistoryGroup = useAnnotationStore((state) => state.endHistoryGroup);
+
   return (
     <div
       role="toolbar"
       aria-label="Annotation tools"
       className="
-        pointer-events-none fixed inset-x-0 bottom-0 z-40
+        pointer-events-none fixed inset-x-0 bottom-0 z-15
         flex flex-col items-center gap-2
         px-3 pb-[max(1rem,env(safe-area-inset-bottom))]
       "
@@ -80,7 +87,10 @@ export function AnnotationToolbar({
 
             <button
               type="button"
-              onClick={() => setShowStyle(false)}
+              onClick={() => {
+                endHistoryGroup();
+                setShowStyle(false);
+              }}
               aria-label="Close style controls"
               className="rounded-md p-1 text-text-muted transition-colors hover:bg-surface-raised hover:text-text"
             >
@@ -121,25 +131,20 @@ export function AnnotationToolbar({
                 const Icon = TYPE_ICONS[option.type];
 
                 return (
-                  <button
+                  <Button
                     key={option.type}
                     type="button"
                     aria-label={option.label}
                     aria-pressed={active}
                     title={option.label}
                     onClick={() => onChangeType(option.type)}
-                    className={`
-                      flex h-8 w-8 shrink-0 items-center justify-center
-                      rounded-md transition-all duration-150
-                      ${
-                        active
-                          ? "bg-background text-text shadow-sm ring-1 ring-border"
-                          : "text-text-muted hover:bg-background/70 hover:text-text"
-                      }
-                    `}
+                    size="sm"
+                    variant="soft"
+                    color={active ? "brand" : "neutral"}
+                    iconOnly
                   >
                     <Icon size={15} strokeWidth={1.8} />
-                  </button>
+                  </Button>
                 );
               })}
             </div>
@@ -150,24 +155,26 @@ export function AnnotationToolbar({
 
         {/* Style */}
         {onStyleChange && (
-          <button
+          <Button
             type="button"
+            size="sm"
+            color={showStyle ? "brand" : "neutral"}
+            variant="soft"
             aria-expanded={showStyle}
             aria-controls="annotation-style-panel"
-            onClick={() => setShowStyle((value) => !value)}
-            className={`
-              flex h-9 shrink-0 items-center gap-2 rounded-lg
-              px-2.5 text-xs font-medium transition-colors
-              ${
-                showStyle
-                  ? "bg-surface-raised text-text"
-                  : "text-text-muted hover:bg-surface-raised hover:text-text"
+            onClick={() => {
+              if (showStyle) {
+                endHistoryGroup();
+                setShowStyle(false);
+              } else {
+                beginHistoryGroup();
+                setShowStyle(true);
               }
-            `}
+            }}
           >
             <SlidersHorizontal size={15} strokeWidth={1.8} />
             <span>Style</span>
-          </button>
+          </Button>
         )}
 
         {/* Signature */}
@@ -210,7 +217,14 @@ export function AnnotationToolbar({
         {/* Done */}
         <button
           type="button"
-          onClick={onDone}
+          onClick={() => {
+            if (showStyle) {
+              endHistoryGroup();
+              setShowStyle(false);
+            }
+
+            onDone();
+          }}
           className="
             flex h-9 shrink-0 items-center gap-2 rounded-lg
             bg-brand px-3.5 text-xs font-semibold text-white

@@ -17,10 +17,16 @@ export interface AnnotationPosition {
 export interface AnnotationStyle {
   fontSize?: number;
   fontFamily?: string;
+  fontWeight?: "normal" | "bold";
   color?: string;
   backgroundColor?: string;
+
   borderColor?: string;
   borderWidth?: number;
+  borderStyle?: "solid" | "dashed" | "dotted";
+  borderRadius?: number;
+
+  opacity?: number;
   textAlign?: "left" | "center" | "right";
 }
 

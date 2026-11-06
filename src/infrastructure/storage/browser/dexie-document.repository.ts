@@ -11,11 +11,11 @@ import type { UpdateDocumentInput } from "@/features/documents/domain/document.t
 
 export class DexieDocumentRepository implements DocumentRepository {
   async getById(id: DocumentId): Promise<Document | null> {
-    const document = await database.documents.get(id);
+    const byPrimaryKey = await database.documents.get(id);
 
-    if (!document || document.deletedAt) return null;
+    const byIndex = await database.documents.where("id").equals(id).first();
 
-    return document;
+    return byPrimaryKey ?? byIndex ?? null;
   }
 
   async getAll(): Promise<Document[]> {

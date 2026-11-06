@@ -6,7 +6,7 @@ import { Button, FormField, Input } from "@splenddev/kreativ-ui/components";
 
 import type { SignatureAsset } from "@/features/assets/domain/signature.types";
 import { signatureService } from "@/features/assets/services";
-import { SignaturePad } from "@/features/editor/components/SignaturePad";
+import { SignaturePad } from "@/features/editor/components/annotations/SignaturePad";
 import { toSafeFilename } from "@/lib/toSafeFilename";
 
 export function AssetsView() {
@@ -227,9 +227,6 @@ function SignatureCard({
   function handleDownload() {
     if (!signature.png) return;
 
-    
-    
-    
     const mime = signature.png instanceof Blob ? signature.png.type : "";
     const extension = mime === "image/svg+xml" ? "svg" : "png";
 
@@ -241,7 +238,6 @@ function SignatureCard({
     link.click();
     link.remove();
 
-    
     setTimeout(() => URL.revokeObjectURL(url), 100);
   }
 

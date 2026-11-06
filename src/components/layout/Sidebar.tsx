@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 
 import { cn } from "@/lib/cn";
 
@@ -115,6 +115,9 @@ const SidebarContent = ({
   onClose,
 }: SidebarContentProps) => {
   const isActive = (href: string) => {
+    console.log(href);
+    console.log(pathname);
+
     if (pathname === href) return true;
 
     if (href === "/dashboard") return false;
@@ -410,6 +413,8 @@ type SidebarProps = {
 
 const Sidebar = ({ isCollapsed = false, setIsCollapsed }: SidebarProps) => {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const fullUrl = `${pathname}?${searchParams.toString()}`;
 
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isCollectionsOpen, setIsCollectionsOpen] = useState(true);
@@ -489,10 +494,10 @@ const Sidebar = ({ isCollapsed = false, setIsCollapsed }: SidebarProps) => {
 
   useEffect(() => {
     setIsMobileOpen(false);
-  }, [pathname]);
+  }, [fullUrl]);
 
   const contentProps = {
-    pathname,
+    pathname: fullUrl,
     isCollectionsOpen,
     setIsCollectionsOpen,
   };

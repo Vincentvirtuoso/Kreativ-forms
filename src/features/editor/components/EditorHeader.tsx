@@ -4,19 +4,22 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   AlertCircle,
   Check,
+  Eye,
   FileText,
   PanelLeftClose,
   PanelLeftOpen,
   PanelRightClose,
   PanelRightOpen,
+  Redo2,
   Save,
+  Undo2,
   type LucideIcon,
 } from "lucide-react";
 
 import type { AnnotationType } from "../domain/annotation.types";
 import type { SaveStatus } from "../services/annotation-autosave.controller";
 
-import { annotationTools } from "./editor-constants";
+import { annotationTools } from "../utils/editor-constants";
 import { Button } from "@splenddev/kreativ-ui/components";
 
 interface EditorHeaderProps {
@@ -32,7 +35,12 @@ interface EditorHeaderProps {
   creatingAnnotation: boolean;
   annotationsLoading: boolean;
   activePageExists: boolean;
+  canUndo: boolean;
+  canRedo: boolean;
   onCreateAnnotation: (type: AnnotationType) => void;
+  onPreview: () => void;
+  onUndo: () => void;
+  onRedo: () => void;
 }
 
 export function EditorHeader({
@@ -45,14 +53,18 @@ export function EditorHeader({
   saveStatus,
   onSave,
   onRetry,
+  canUndo,
+  canRedo,
+  onUndo,
+  onRedo,
   creatingAnnotation,
   annotationsLoading,
   activePageExists,
   onCreateAnnotation,
+  onPreview,
 }: EditorHeaderProps) {
   return (
     <header className="z-20 flex shrink-0 flex-wrap items-center justify-between gap-x-3 border-b border-border bg-surface px-3 lg:flex-nowrap">
-      {/* Document information */}
       <div className="flex h-12 min-w-0 items-center gap-2 sm:gap-3">
         <Button
           type="button"
@@ -81,7 +93,38 @@ export function EditorHeader({
         </div>
       </div>
 
-      {/* Annotation toolbar */}
+      <div className="flex shrink-0 items-center gap-1 border-r border-border pr-2 mr-1">
+        <Button
+          type="button"
+          size="xs"
+          iconOnly
+          variant="ghost"
+          color="neutral"
+          disabled={!canUndo}
+          onClick={onUndo}
+          aria-label="Undo"
+          title="Undo (Ctrl+Z)"
+          className="size-8"
+        >
+          <Undo2 size={16} />
+        </Button>
+
+        <Button
+          type="button"
+          size="xs"
+          iconOnly
+          variant="ghost"
+          color="neutral"
+          disabled={!canRedo}
+          onClick={onRedo}
+          aria-label="Redo"
+          title="Redo (Ctrl+Shift+Z)"
+          className="size-8"
+        >
+          <Redo2 size={16} />
+        </Button>
+      </div>
+
       <div
         role="toolbar"
         aria-label="Add annotation"
@@ -94,9 +137,7 @@ export function EditorHeader({
             size="xs"
             typography="bodySmall"
             disabled={
-              !activePageExists ||
-              annotationsLoading ||
-              creatingAnnotation
+              !activePageExists || annotationsLoading || creatingAnnotation
             }
             variant="ghost"
             color="neutral"
@@ -109,25 +150,34 @@ export function EditorHeader({
         ))}
       </div>
 
-      {/* Editor actions */}
       <div className="flex h-12 shrink-0 items-center gap-2">
         <span className="hidden whitespace-nowrap text-xs text-text-muted sm:inline">
           {pageCount} {pageCount === 1 ? "page" : "pages"}
         </span>
 
-        <SaveButton
-          status={saveStatus}
-          onSave={onSave}
-          onRetry={onRetry}
-        />
+        <Button
+          type="button"
+          size={{ base: "icon", sm: "sm" }}
+          typography="bodySmall"
+          variant="ghost"
+          color="neutral"
+          onClick={onPreview}
+          disabled={!activePageExists || annotationsLoading}
+          aria-label="Preview result"
+          title="Preview how the finished document will look"
+          className="h-9 shrink-0 rounded-md"
+          leftIcon={<Eye size={16} />}
+        >
+          <span className="hidden sm:inline">Preview</span>
+        </Button>
+
+        <SaveButton status={saveStatus} onSave={onSave} onRetry={onRetry} />
 
         <Button
           type="button"
           onClick={onToggleProperties}
           aria-label={
-            showProperties
-              ? "Hide properties panel"
-              : "Show properties panel"
+            showProperties ? "Hide properties panel" : "Show properties panel"
           }
           aria-pressed={showProperties}
           size="sm"
@@ -154,10 +204,7 @@ const SAVE_LABEL: Record<SaveStatus, string> = {
   error: "Retry",
 };
 
-const SAVE_ICON: Record<
-  Exclude<SaveStatus, "saving">,
-  LucideIcon
-> = {
+const SAVE_ICON: Record<Exclude<SaveStatus, "saving">, LucideIcon> = {
   idle: Save,
   saved: Check,
   error: AlertCircle,
@@ -206,11 +253,7 @@ function SaveButton({
       className="h-9 shrink-0 rounded-md"
       color={isError ? "destructive" : "brand"}
       variant={isSaved ? "soft" : "solid"}
-      leftIcon={
-        !isSaving ? (
-          <SaveStatusIcon status={status} />
-        ) : undefined
-      }
+      leftIcon={!isSaving ? <SaveStatusIcon status={status} /> : undefined}
     >
       <span className="hidden sm:inline">
         <AnimatePresence mode="wait" initial={false}>
@@ -233,11 +276,7 @@ function SaveButton({
   );
 }
 
-function SaveStatusIcon({
-  status,
-}: {
-  status: Exclude<SaveStatus, "saving">;
-}) {
+function SaveStatusIcon({ status }: { status: Exclude<SaveStatus, "saving"> }) {
   const Icon = SAVE_ICON[status];
 
   return (
@@ -308,11 +347,7 @@ function PanelToggleIcon({
           }}
           className="absolute inset-0 flex items-center justify-center"
         >
-          {open ? (
-            <CloseIcon size={17} />
-          ) : (
-            <OpenIcon size={17} />
-          )}
+          {open ? <CloseIcon size={17} /> : <OpenIcon size={17} />}
         </motion.span>
       </AnimatePresence>
     </span>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { getDocumentRepositories } from "@/features/documents/document-repository.factory";
 import type {
@@ -27,6 +27,9 @@ import type {
 } from "../domain/annotation.types";
 import { DocumentPersistenceService } from "@/features/documents/services/document-persistence.service";
 import { useDocumentSaveGuard } from "../hooks/useDocumentSaveGuard";
+import { PreviewDialog } from "./PreviewDialog";
+
+type HistoryDirection = "undo" | "redo";
 
 const DEFAULT_SIZE: Record<AnnotationType, { width: number; height: number }> =
   {
@@ -67,6 +70,13 @@ export function EditorWorkspace({
     {},
   );
   const [documentSaveFailed, setDocumentSaveFailed] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
+  const [historyBusy, setHistoryBusy] = useState(false);
+
+  const undo = useAnnotationStore((state) => state.undo);
+  const redo = useAnnotationStore((state) => state.redo);
+  const canUndo = useAnnotationStore((state) => state.canUndo);
+  const canRedo = useAnnotationStore((state) => state.canRedo);
 
   const addAnnotation = useAnnotationStore((state) => state.addAnnotation);
 
@@ -107,11 +117,10 @@ export function EditorWorkspace({
     return new AnnotationService(repositories.annotations);
   }, [document.persistence]);
 
-  const {
-    autosave,
-    saveStatus,
-    // retrySave
-  } = useAnnotationPersistence(annotationService, document.id);
+  const { autosave, saveStatus } = useAnnotationPersistence(
+    annotationService,
+    document.id,
+  );
 
   const documentPersistence = useMemo(() => {
     const repositories = getDocumentRepositories(document.persistence);
@@ -151,6 +160,102 @@ export function EditorWorkspace({
     setAnnotationError(null);
     autosave.schedule(id, update);
   }
+
+  async function persistAnnotationSnapshot(
+    from: Annotation[],
+    to: Annotation[],
+  ) {
+    const previous = new Map(from.map((item) => [item.id, item]));
+    const next = new Map(to.map((item) => [item.id, item]));
+
+    // Delete annotations that no longer exist.
+    for (const annotation of from) {
+      if (!next.has(annotation.id)) {
+        await annotationService.delete(annotation.id);
+      }
+    }
+
+    // Create new annotations and restore changed annotations.
+    for (const annotation of to) {
+      const existing = previous.get(annotation.id);
+
+      if (!existing) {
+        await annotationService.create(annotation);
+        continue;
+      }
+
+      if (JSON.stringify(existing) !== JSON.stringify(annotation)) {
+        await annotationService.replace(annotation);
+      }
+    }
+  }
+
+  const handleHistory = useCallback(
+    async (direction: HistoryDirection) => {
+      if (annotationsLoading || historyBusy) return;
+
+      const store = useAnnotationStore.getState();
+
+      if (direction === "undo" ? !store.canUndo : !store.canRedo) {
+        return;
+      }
+
+      setHistoryBusy(true);
+      setAnnotationError(null);
+
+      try {
+        // Ensure pending edits reach IndexedDB before restoring a snapshot.
+        await autosave.flushAll();
+
+        const before = useAnnotationStore.getState().annotations;
+
+        if (direction === "undo") {
+          undo();
+        } else {
+          redo();
+        }
+
+        const after = useAnnotationStore.getState().annotations;
+
+        try {
+          await persistAnnotationSnapshot(before, after);
+        } catch (error) {
+          // Restore the in-memory history position if persistence fails.
+          if (direction === "undo") {
+            redo();
+          } else {
+            undo();
+          }
+
+          // Best-effort rollback in IndexedDB.
+          try {
+            await persistAnnotationSnapshot(after, before);
+          } catch (rollbackError) {
+            console.error("History rollback failed:", rollbackError);
+          }
+
+          throw error;
+        }
+      } catch (error) {
+        console.error("Undo/Redo failed:", error);
+
+        setAnnotationError(
+          "Unable to restore annotation changes. Please try again.",
+        );
+      } finally {
+        setHistoryBusy(false);
+      }
+    },
+    [annotationsLoading, historyBusy, autosave, undo, redo],
+  );
+
+  const handleUndo = useCallback(() => {
+    void handleHistory("undo");
+  }, [handleHistory]);
+
+  const handleRedo = useCallback(() => {
+    void handleHistory("redo");
+  }, [handleHistory]);
 
   function handleAnnotationUpdate(update: AnnotationUpdate) {
     if (!selectedAnnotation || selectedAnnotation.type !== update.type) {
@@ -242,6 +347,46 @@ export function EditorWorkspace({
       Math.min(Math.max(current, 1), Math.max(orderedPages.length, 1)),
     );
   }, [orderedPages.length]);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+
+      const target = event.target;
+
+      if (
+        target instanceof HTMLElement &&
+        target.closest("input, textarea, select, [contenteditable='true']")
+      ) {
+        return;
+      }
+
+      if (event.repeat || annotationsLoading || historyBusy || previewing) {
+        return;
+      }
+
+      const key = event.key.toLowerCase();
+
+      if (key === "z") {
+        event.preventDefault();
+
+        if (event.shiftKey) {
+          handleRedo();
+        } else {
+          handleUndo();
+        }
+      } else if (key === "y") {
+        event.preventDefault();
+        handleRedo();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [annotationsLoading, historyBusy, previewing, handleUndo, handleRedo]);
 
   function handleSelectPage(page: number) {
     setSelectedPage(page);
@@ -481,6 +626,11 @@ export function EditorWorkspace({
         annotationsLoading={annotationsLoading}
         activePageExists={Boolean(activePage)}
         onCreateAnnotation={(type) => void handleCreateAnnotation(type)}
+        onPreview={() => setPreviewing(true)}
+        canUndo={canUndo && !historyBusy && !annotationsLoading}
+        canRedo={canRedo && !historyBusy && !annotationsLoading}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
       />
 
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
@@ -539,6 +689,16 @@ export function EditorWorkspace({
           />
         )}
       </div>
+      {previewing && (
+        <PreviewDialog
+          documentId={document.id}
+          documentName={document.name}
+          blob={workingPdf.blob}
+          pages={orderedPages}
+          initialPage={selectedPage}
+          onClose={() => setPreviewing(false)}
+        />
+      )}
     </div>
   );
 }

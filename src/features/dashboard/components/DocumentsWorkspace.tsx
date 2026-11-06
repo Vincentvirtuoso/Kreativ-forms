@@ -19,6 +19,7 @@ import {
 
 import { useDocuments, type WorkspaceDocument } from "../hooks/useDocuments";
 import { useSettings } from "@/features/settings/providers/settings-provider";
+import { Select } from "@splenddev/kreativ-ui";
 
 type SortKey = "recent" | "name";
 type StatusFilter = "all" | WorkspaceDocument["status"];

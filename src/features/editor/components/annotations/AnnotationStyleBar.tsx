@@ -3,19 +3,11 @@
 import { AlignCenter, AlignLeft, AlignRight, Minus, Plus } from "lucide-react";
 
 import type { Annotation } from "../../domain/annotation.types";
+import { FONT_FAMILY_OPTIONS } from "../../utils/font-family-constants";
 
 type Style = Annotation["style"];
 
 export type FontOption = { label: string; value: string };
-
-// Replace with your own list (e.g. your handwriting fonts) via the `fonts` prop.
-const DEFAULT_FONTS: FontOption[] = [
-  { label: "Default", value: "" },
-  { label: "Sans", value: "Arial, Helvetica, sans-serif" },
-  { label: "Serif", value: "Georgia, 'Times New Roman', serif" },
-  { label: "Mono", value: "ui-monospace, Menlo, Consolas, monospace" },
-  { label: "Handwriting", value: "'Brush Script MT', 'Segoe Script', cursive" },
-];
 
 const TEXT_COLORS = ["#111827", "#1d4ed8", "#15803d", "#b91c1c", "#7c3aed"];
 const FILL_COLORS = ["transparent", "#ffffff", "#fef9c3", "#dbeafe", "#dcfce7"];
@@ -38,7 +30,7 @@ interface AnnotationStyleBarProps {
 export function AnnotationStyleBar({
   annotation,
   onChange,
-  fonts = DEFAULT_FONTS,
+  fonts = FONT_FAMILY_OPTIONS,
   className = "",
 }: AnnotationStyleBarProps) {
   const { style, type } = annotation;
@@ -54,7 +46,7 @@ export function AnnotationStyleBar({
     <div
       role="group"
       aria-label="Annotation style"
-      className={`flex items-center gap-4 overflow-x-auto p-2 ${className}`}
+      className={`flex items-center gap-4 overflow-x-auto p-2 ${className} z-14`}
     >
       {hasText && (
         <>

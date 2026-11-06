@@ -35,6 +35,8 @@ interface AnnotationOverlayProps {
   pageId: string;
   documentId: string;
   disabled?: boolean;
+  /** Read-only rendering of the finished result (see PreviewDialog). */
+  previewMode?: boolean;
 
   scale?: number;
   onUpdate: (id: string, update: AnnotationUpdate) => void;
@@ -53,6 +55,7 @@ export function AnnotationOverlay({
   pageId,
   documentId,
   disabled = false,
+  previewMode = false,
   scale = 1,
   onUpdate,
   onDelete,
@@ -217,6 +220,26 @@ export function AnnotationOverlay({
     setEditingSignatureId(null);
   }
 
+  function handleStyleChange(
+    annotation: Annotation,
+    changes: Partial<Annotation["style"]>,
+  ) {
+    if (disabled) return;
+
+    // An undefined value (e.g. the "Default" font) clears that property.
+    const style = { ...annotation.style, ...changes };
+
+    // NOTE: AnnotationUpdate must accept `style` inside `changes` for every
+    // annotation type, otherwise widen that type instead of relying on the cast.
+    const update = {
+      type: annotation.type,
+      changes: { style },
+    } as AnnotationUpdate;
+
+    updateAnnotation(annotation.id, update);
+    onUpdate(annotation.id, update);
+  }
+
   function handleAnnotationChange(
     annotation: Annotation,
     value: string | boolean,
@@ -345,6 +368,7 @@ export function AnnotationOverlay({
               position={position}
               selected={annotation.id === selectedId}
               disabled={disabled}
+              preview={previewMode}
               scale={scale}
               dragging={preview?.id === annotation.id ? preview.mode : null}
               onPointerDown={(event, mode, handle) =>
@@ -371,6 +395,9 @@ export function AnnotationOverlay({
             onChangeType={(type) => void changeType(selectedAnnotation, type)}
             onDelete={() => void deleteAnnotation(selectedAnnotation.id)}
             onSign={() => setEditingSignatureId(selectedAnnotation.id)}
+            onStyleChange={(changes) =>
+              handleStyleChange(selectedAnnotation, changes)
+            }
             onDone={() => selectAnnotation(null)}
           />,
           portalRoot,

@@ -3,7 +3,7 @@
 import { FileText } from "lucide-react";
 import { cn } from "@/lib/cn";
 import type { DocumentPage } from "@/features/documents/domain/document.types";
-import { headerHeight } from "./editor-constants";
+import { headerHeight } from "../utils/editor-constants";
 
 interface PagesPanelProps {
   pages: DocumentPage[];

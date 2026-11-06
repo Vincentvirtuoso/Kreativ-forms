@@ -14,7 +14,7 @@ export function AnnotationContent({
   onRequestSign: () => void;
 }) {
   const controlClass =
-    "h-full w-full min-w-0 border-0 bg-transparent px-1 text-inherit outline-none";
+    "h-full w-full min-w-0 border-0 bg-red px-1 text-inherit outline-none";
 
   switch (annotation.type) {
     case "text":
