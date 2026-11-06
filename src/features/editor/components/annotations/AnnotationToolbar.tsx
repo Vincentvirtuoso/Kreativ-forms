@@ -215,7 +215,7 @@ export function AnnotationToolbar({
         )}
 
         {/* Done */}
-        <button
+        <Button
           type="button"
           onClick={() => {
             if (showStyle) {
@@ -225,16 +225,11 @@ export function AnnotationToolbar({
 
             onDone();
           }}
-          className="
-            flex h-9 shrink-0 items-center gap-2 rounded-lg
-            bg-brand px-3.5 text-xs font-semibold text-white
-            shadow-sm transition-all
-            hover:brightness-110 active:scale-[0.97]
-          "
+          size="sm"
         >
           <Check size={15} strokeWidth={2} />
           Done
-        </button>
+        </Button>
       </div>
     </div>
   );

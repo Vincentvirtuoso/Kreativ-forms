@@ -67,7 +67,7 @@ export function PreviewDialog({
       role="dialog"
       aria-modal="true"
       aria-label={`Preview of ${documentName}`}
-      className="absolute inset-0 z-50 flex flex-col bg-background text-text"
+      className="absolute inset-0 z-40 flex flex-col bg-background text-text"
     >
       <div className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border bg-surface px-3 sm:px-4">
         <div className="min-w-0">

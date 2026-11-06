@@ -26,7 +26,7 @@ export const AppShell = ({ children }: AppShellProps) => {
       <main className="flex min-h-screen min-w-0 flex-1 flex-col">
         <header
           className="
-          sticky top-0 z-30 flex h-16 shrink-0
+          sticky top-0 z-50 flex h-16 shrink-0
           items-center justify-end
           border-b border-border/60
           bg-background/85 px-5
