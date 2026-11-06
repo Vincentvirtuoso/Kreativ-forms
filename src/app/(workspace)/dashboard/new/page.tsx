@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowLeft, FilePlus2, FileText, ShieldCheck, Zap } from "lucide-react";
 
 import { DocumentImportForm } from "@/features/documents/import/components/DocumentImportForm";
+import { ImportFormClient } from "./import-form-client";
 
 const benefits = [
   {
@@ -65,8 +66,9 @@ export default async function NewDocumentPage({
             </header>
 
             <section className="rounded-2xl border border-border bg-surface p-4 shadow-sm sm:p-6">
-              <DocumentImportForm />
-            </section>
+  <ImportFormClient />
+</section>
+
           </div>
 
           <aside
