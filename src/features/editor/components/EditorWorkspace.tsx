@@ -28,6 +28,10 @@ import type {
 import { DocumentPersistenceService } from "@/features/documents/services/document-persistence.service";
 import { useDocumentSaveGuard } from "../hooks/useDocumentSaveGuard";
 import { PreviewDialog } from "./PreviewDialog";
+import { PdfExportService } from "@/features/documents/services/pdf-export.service";
+import { DocumentLoaderService } from "@/features/documents/services/document-loader.service";
+import { getHandwritingProfileRepository } from "@/features/handwriting/repositories/handwriting-repository.factory";
+import { downloadPdf } from "@/features/documents/utils/pdf-download.util";
 
 type HistoryDirection = "undo" | "redo";
 
@@ -72,6 +76,9 @@ export function EditorWorkspace({
   const [documentSaveFailed, setDocumentSaveFailed] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const [historyBusy, setHistoryBusy] = useState(false);
+  const [annotationsLoading, setAnnotationsLoading] = useState(true);
+  const [annotationError, setAnnotationError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   const undo = useAnnotationStore((state) => state.undo);
   const redo = useAnnotationStore((state) => state.redo);
@@ -108,25 +115,40 @@ export function EditorWorkspace({
     (state) => state.updateAnnotation,
   );
 
-  const [annotationsLoading, setAnnotationsLoading] = useState(true);
-  const [annotationError, setAnnotationError] = useState<string | null>(null);
+  const repositories = useMemo(
+    () => getDocumentRepositories(document.persistence),
+    [document.persistence],
+  );
 
-  const annotationService = useMemo(() => {
-    const repositories = getDocumentRepositories(document.persistence);
+  const annotationService = useMemo(
+    () =>
+      new AnnotationService(repositories.annotations, repositories.documents),
+    [repositories],
+  );
 
-    return new AnnotationService(repositories.annotations);
-  }, [document.persistence]);
+  const documentPersistence = useMemo(
+    () => new DocumentPersistenceService(repositories),
+    [repositories],
+  );
+
+  const pdfExportService = useMemo(() => {
+    const loader = new DocumentLoaderService(
+      repositories.documents,
+      repositories.assets,
+      repositories.pages,
+    );
+
+    return new PdfExportService(
+      loader,
+      repositories.annotations,
+      getHandwritingProfileRepository(),
+    );
+  }, [repositories]);
 
   const { autosave, saveStatus } = useAnnotationPersistence(
     annotationService,
     document.id,
   );
-
-  const documentPersistence = useMemo(() => {
-    const repositories = getDocumentRepositories(document.persistence);
-
-    return new DocumentPersistenceService(repositories);
-  }, [document.persistence]);
 
   const hasUnsavedChanges = autosave.hasPending() || documentSaveFailed;
 
@@ -204,7 +226,6 @@ export function EditorWorkspace({
       setAnnotationError(null);
 
       try {
-        // Ensure pending edits reach IndexedDB before restoring a snapshot.
         await autosave.flushAll();
 
         const before = useAnnotationStore.getState().annotations;
@@ -280,6 +301,34 @@ export function EditorWorkspace({
     } as AnnotationUpdate;
 
     handleAnnotationUpdate(update);
+  }
+
+  async function handleExport(): Promise<void> {
+    if (annotationsLoading || exporting) {
+      throw new Error("Please wait until annotations are ready.");
+    }
+
+    setExporting(true);
+    setAnnotationError(null);
+
+    try {
+      await autosave.flushAll();
+
+      const result = await pdfExportService.export(document.id);
+
+      downloadPdf(result.blob, result.filename);
+
+      await repositories.documents.update(document.id, {
+        status: "completed",
+        completedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error("PDF export failed:", error);
+
+      throw error;
+    } finally {
+      setExporting(false);
+    }
   }
 
   useEffect(() => {
@@ -697,6 +746,7 @@ export function EditorWorkspace({
           pages={orderedPages}
           initialPage={selectedPage}
           onClose={() => setPreviewing(false)}
+          onExport={handleExport}
         />
       )}
     </div>

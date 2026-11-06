@@ -98,7 +98,7 @@ export const ProgressBar = forwardRef<HTMLDivElement, ProgressBarProps>(
           aria-valuetext={
             isIndeterminate ? undefined : `${Math.round(percent)}%`
           }
-          className={`relative w-full overflow-hidden rounded-full bg-surface-sunken ${trackSize[size]}`}
+          className={`relative w-full overflow-hidden rounded-full bg-surface-raised ${trackSize[size]}`}
         >
           {isIndeterminate ? (
             <div

@@ -23,6 +23,8 @@ import type {
   AnnotationPosition,
   AnnotationUpdate,
 } from "../domain/annotation.types";
+import { loadHandwritingFonts } from "@/features/handwriting/services/handwriting-font-loader.service";
+import { cn } from "@/lib/cn";
 
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 3;
@@ -274,6 +276,12 @@ export function PdfDocumentViewer({
   }, [pdf]);
 
   useEffect(() => {
+    void loadHandwritingFonts().catch((error) => {
+      console.error("Unable to restore handwriting fonts:", error);
+    });
+  }, [documentId]);
+
+  useEffect(() => {
     scrollRef.current?.scrollTo({ top: 0, left: 0 });
   }, [pageNumber]);
 
@@ -405,7 +413,7 @@ export function PdfDocumentViewer({
 
         {/* Extra bottom padding keeps the page clear of the annotation toolbar. */}
         <div
-          className="m-auto shrink-0 p-4 pb-24"
+          className={cn("m-auto shrink-0 p-4", !previewMode ? "pb-24" : "")}
           style={
             pinchRatio !== 1 ? { transform: `scale(${pinchRatio})` } : undefined
           }

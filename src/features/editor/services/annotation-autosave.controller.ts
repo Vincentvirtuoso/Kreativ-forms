@@ -127,27 +127,30 @@ export class AnnotationAutosaveController {
   }
 
   async flushAll(): Promise<void> {
-    while (this.pending.size > 0 || this.inFlight.size > 0) {
-      const ids = new Set([...this.pending.keys(), ...this.inFlight.keys()]);
+    const ids = new Set([...this.pending.keys(), ...this.inFlight.keys()]);
 
-      const results = await Promise.allSettled(
-        [...ids].map((id) => this.flush(id)),
+    const results = await Promise.allSettled(
+      [...ids].map((id) => this.flush(id)),
+    );
+
+    const failures = results.filter((result) => result.status === "rejected");
+
+    if (failures.length > 0) {
+      this.onStatusChange?.("error");
+
+      throw new Error(
+        `${failures.length} annotation update(s) failed to save.`,
       );
+    }
 
-      const failures = results.filter((result) => result.status === "rejected");
-
-      if (failures.length > 0) {
-        this.onStatusChange?.("error");
-
-        throw new Error(
-          `${failures.length} annotation update(s) failed to save.`,
-        );
-      }
+    if (this.pending.size > 0 || this.inFlight.size > 0) {
+      await this.flushAll();
+      return;
     }
 
     this.onStatusChange?.("saved");
   }
-
+  
   hasPending(id?: AnnotationId): boolean {
     if (id) {
       return this.pending.has(id) || this.inFlight.has(id);

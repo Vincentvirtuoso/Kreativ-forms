@@ -5,9 +5,12 @@ import { createPortal } from "react-dom";
 import { Check, PenLine, X } from "lucide-react";
 import { Button } from "@splenddev/kreativ-ui/components";
 
-import { SignaturePad, type SignatureDrawing } from "./SignaturePad";
+import {
+  SignaturePad,
+  type SignatureDrawing,
+} from "../../../assets/components/SignaturePad";
 import type { SignatureAsset } from "@/features/assets/domain/signature.types";
-import { signatureService } from "@/features/assets/services";
+import { signatureService } from "@/features/assets/services/signature.service";
 
 interface SignatureDialogProps {
   open: boolean;

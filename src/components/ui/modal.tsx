@@ -1,102 +1,219 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
-import { X } from "lucide-react";
+import { cn } from "@/lib/cn";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { createPortal } from "react-dom";
 
-interface ModalProps {
-  open: boolean;
-  onClose: () => void;
-  title?: string;
-  description?: string;
-  children: ReactNode;
-  footer?: ReactNode;
-  size?: "sm" | "md" | "lg";
-}
+type ModalSize = "sm" | "md" | "lg" | "xl" | "2xl" | "full";
 
-const sizeClasses: Record<NonNullable<ModalProps["size"]>, string> = {
+const SIZE_CLASSES: Record<ModalSize, string> = {
   sm: "max-w-sm",
   md: "max-w-md",
   lg: "max-w-lg",
+  xl: "max-w-xl",
+  "2xl": "max-w-2xl",
+  full: "max-w-full",
 };
+
+export interface ModalProps {
+  open: boolean;
+  onClose: () => void;
+  /** Prevent closing via backdrop / Escape while true */
+  busy?: boolean;
+  title?: string;
+  description?: ReactNode;
+  children: ReactNode;
+  /** Optional footer (typically action buttons) */
+  footer?: ReactNode;
+  /** Panel width */
+  size?: ModalSize;
+  /** Extra classes on the panel */
+  className?: string;
+  /** role defaults to "dialog". Use "alertdialog" for confirms */
+  role?: "dialog" | "alertdialog";
+}
 
 export function Modal({
   open,
   onClose,
+  busy = false,
   title,
   description,
   children,
   footer,
   size = "md",
+  className = "",
+  role = "dialog",
 }: ModalProps) {
-  const dialogRef = useRef<HTMLDialogElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+  const descriptionId = useId();
 
-  // Show / hide the native dialog in sync with the `open` prop.
+  // Resolve themed portal root from an in-place sentinel
+  const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
+  const sentinelRef = useCallback((node: HTMLSpanElement | null) => {
+    if (!node) {
+      setPortalRoot(null);
+      return;
+    }
+    setPortalRoot(
+      node.closest<HTMLElement>("[data-kreativ-theme]") ?? document.body,
+    );
+  }, []);
+
+  const onCloseRef = useRef(onClose);
+  const busyRef = useRef(busy);
   useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
+    onCloseRef.current = onClose;
+    busyRef.current = busy;
+  }, [onClose, busy]);
 
-    if (open && !dialog.open) dialog.showModal();
-    else if (!open && dialog.open) dialog.close();
+  // Focus restore
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (open) {
+      previouslyFocusedRef.current =
+        document.activeElement as HTMLElement | null;
+    } else {
+      previouslyFocusedRef.current?.focus?.();
+      previouslyFocusedRef.current = null;
+    }
   }, [open]);
 
-  // Bridge the native `close` event (Esc, backdrop, form methods) back to React.
+  // Body scroll lock
   useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
+    if (!open) return;
 
-    const handleClose = () => onClose();
-    dialog.addEventListener("close", handleClose);
-    return () => dialog.removeEventListener("close", handleClose);
-  }, [onClose]);
+    const { body, documentElement } = document;
+    const scrollBarWidth = window.innerWidth - documentElement.clientWidth;
+    const previousOverflow = body.style.overflow;
+    const previousPaddingRight = body.style.paddingRight;
+
+    body.style.overflow = "hidden";
+    if (scrollBarWidth > 0) {
+      body.style.paddingRight = `${scrollBarWidth}px`;
+    }
+
+    return () => {
+      body.style.overflow = previousOverflow;
+      body.style.paddingRight = previousPaddingRight;
+    };
+  }, [open]);
+
+  // Escape + simple focus trap
+  useEffect(() => {
+    if (!open || !portalRoot) return;
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        if (!busyRef.current) onCloseRef.current();
+        return;
+      }
+
+      if (event.key !== "Tab") return;
+
+      const focusable = panelRef.current?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      if (!focusable?.length) return;
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+
+      if (event.shiftKey && active === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [open, portalRoot]);
 
   return (
-    <dialog
-      ref={dialogRef}
-      className="fixed inset-0 m-0 h-screen w-screen max-w-none max-h-none border-0 bg-transparent p-0 backdrop:bg-black/40 backdrop:backdrop-blur-sm"
-    >
-      {/* Full-bleed flex wrapper – clicking the empty area closes the modal. */}
-      <div
-        onClick={(event) => {
-          if (event.target === event.currentTarget) onClose();
-        }}
-        className="flex min-h-full items-center justify-center p-4 sm:p-6"
-      >
-        <div
-          role="document"
-          className={`relative w-full ${sizeClasses[size]} overflow-hidden rounded-xl border border-border bg-surface-raised shadow-[0_10px_40px_-10px_rgba(0,0,0,0.25)]`}
-        >
-          {(title || description) && (
-            <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
-              <div className="min-w-0">
-                {title && (
-                  <h2 className="text-sm font-semibold text-text">{title}</h2>
-                )}
-                {description && (
-                  <p className="mt-0.5 text-xs text-text-muted">
-                    {description}
-                  </p>
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={onClose}
-                aria-label="Close dialog"
-                className="-m-1 shrink-0 rounded-md p-1 text-text-muted transition-colors hover:bg-surface-muted hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-              >
-                <X size={16} />
-              </button>
-            </div>
-          )}
+    <>
+      <span ref={sentinelRef} hidden aria-hidden="true" />
 
-          <div className="px-5 py-4">{children}</div>
+      {open &&
+        portalRoot &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-50 flex items-end justify-center sm:items-center"
+            onPointerDown={(event) => {
+              if (event.target === event.currentTarget && !busy) {
+                onClose();
+              }
+            }}
+          >
+            {/* Backdrop */}
+            <div
+              className="absolute inset-0 bg-black/40 backdrop-blur-[2px] animate-in fade-in duration-150"
+              aria-hidden="true"
+            />
 
-          {footer && (
-            <div className="flex items-center justify-end gap-2 border-t border-border bg-surface-muted/40 px-5 py-3">
-              {footer}
+            {/* Panel */}
+            <div
+              ref={panelRef}
+              role={role}
+              aria-modal="true"
+              aria-labelledby={title ? titleId : undefined}
+              aria-describedby={description ? descriptionId : undefined}
+              className={cn(
+                "relative z-10 flex w-full flex-col overflow-hidden",
+                "max-h-[85dvh]",
+                SIZE_CLASSES[size],
+                "rounded-t-2xl border border-border bg-background shadow-xl",
+                "p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]",
+                "animate-in fade-in slide-in-from-bottom-4 duration-200",
+                "sm:rounded-xl sm:slide-in-from-bottom-0 sm:zoom-in-95",
+                className,
+              )}
+            >
+              {(title || description) && (
+                <div className="mb-5 shrink-0">
+                  {title && (
+                    <h2
+                      id={titleId}
+                      className="text-base font-semibold tracking-tight text-foreground"
+                    >
+                      {title}
+                    </h2>
+                  )}
+                  {description && (
+                    <div
+                      id={descriptionId}
+                      className="mt-1.5 text-sm leading-relaxed text-muted-foreground"
+                    >
+                      {description}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Body — scrolls when content is tall */}
+              <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+
+              {footer && (
+                <footer className="mt-4 shrink-0 border-t border-border pt-4">
+                  {footer}
+                </footer>
+              )}
             </div>
-          )}
-        </div>
-      </div>
-    </dialog>
+          </div>,
+          portalRoot,
+        )}
+    </>
   );
 }

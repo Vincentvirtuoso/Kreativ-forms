@@ -1,31 +1,49 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Images, Plus, PenLine, Trash2, X, Download } from "lucide-react";
-import { Button, FormField, Input } from "@splenddev/kreativ-ui/components";
+import { useRouter } from "next/navigation";
+import {
+  Download,
+  FileSignature,
+  Image as ImageIcon,
+  LoaderCircle,
+  PenLine,
+  Plus,
+  Trash2,
+  X,
+} from "lucide-react";
 
 import type { SignatureAsset } from "@/features/assets/domain/signature.types";
-import { signatureService } from "@/features/assets/services";
-import { SignaturePad } from "@/features/editor/components/annotations/SignaturePad";
+import { signatureService } from "@/features/assets/services/signature.service";
+import { SignaturePad } from "@/features/assets/components/SignaturePad";
+
+import { HandwritingLibrary } from "@/features/handwriting/components/HandwritingLibrary";
 import { toSafeFilename } from "@/lib/toSafeFilename";
+import { Button } from "@splenddev/kreativ-ui/components";
+
+type AssetSection = "signatures" | "handwriting";
 
 export function AssetsView() {
+  const router = useRouter();
+
+  const [activeSection, setActiveSection] =
+    useState<AssetSection>("signatures");
+
   const [signatures, setSignatures] = useState<SignatureAsset[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isCreating, setIsCreating] = useState(false);
   const [signatureName, setSignatureName] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const loadSignatures = useCallback(async () => {
     try {
-      setLoading(true);
+      setError(null);
       const result = await signatureService.getAll();
       setSignatures(result);
-      setError(null);
     } catch {
-      setError("Unable to load your saved signatures.");
+      setError("Unable to load saved signatures.");
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   }, []);
 
@@ -33,30 +51,36 @@ export function AssetsView() {
     void loadSignatures();
   }, [loadSignatures]);
 
-  async function handleSaveSignature(drawing: { png: string; svg?: string }) {
-    if (!signatureName.trim()) {
-      setError("Enter a name for this signature.");
-      return;
-    }
+const handleSaveSignature = async (drawing: { png: string; svg?: string }) => {
+  const name = signatureName.trim();
 
-    try {
-      const signature = await signatureService.createFromDrawing(
-        signatureName,
-        drawing,
-      );
-
-      setSignatures((current) => [signature, ...current]);
-
-      setSignatureName("");
-      setCreating(false);
-      setError(null);
-    } catch {
-      setError("Unable to save this signature. Please try again.");
-    }
+  if (!name) {
+    setError("Give your signature a name before saving.");
+    return;
   }
 
-  async function handleDeleteSignature(id: string) {
+  try {
+    setError(null);
+
+    await signatureService.createFromDrawing(name, drawing);
+
+    setSignatureName("");
+    setIsCreating(false);
+    await loadSignatures();
+  } catch (err) {
+    setError(err instanceof Error ? err.message : "Unable to save signature.");
+  }
+};
+
+  const handleDeleteSignature = async (id: string) => {
+    const confirmed = window.confirm(
+      "Delete this saved signature? This cannot be undone.",
+    );
+
+    if (!confirmed) return;
+
     try {
+      setError(null);
       await signatureService.delete(id);
 
       setSignatures((current) =>
@@ -65,139 +89,235 @@ export function AssetsView() {
     } catch {
       setError("Unable to delete this signature.");
     }
-  }
+  };
 
-  async function handleRenameSignature(id: string, name: string) {
-    const trimmedName = name.trim();
+   async function handleRenameSignature(id: string, name: string) {
+     const trimmedName = name.trim();
 
-    if (!trimmedName) {
-      setError("Signature name cannot be empty.");
-      return;
-    }
+     if (!trimmedName) {
+       setError("Signature name cannot be empty.");
+       return;
+     }
 
-    try {
-      await signatureService.update(id, { name: trimmedName });
+     try {
+       await signatureService.update(id, { name: trimmedName });
 
-      setSignatures((current) =>
-        current.map((signature) =>
-          signature.id === id ? { ...signature, name: trimmedName } : signature,
-        ),
-      );
+       setSignatures((current) =>
+         current.map((signature) =>
+           signature.id === id
+             ? { ...signature, name: trimmedName }
+             : signature,
+         ),
+       );
 
-      setError(null);
-    } catch {
-      setError("Unable to rename this signature.");
-    }
-  }
+       setError(null);
+     } catch {
+       setError("Unable to rename this signature.");
+     }
+   }
+
+  const openHandwritingProfile = (id: string) => {
+    router.push(`/handwriting/${id}`);
+  };
 
   return (
-    <section className="space-y-6">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold text-text">Assets</h1>
-
-          <p className="mt-1 text-sm text-text-muted">
-            Manage reusable resources for your documents.
-          </p>
+    <div className="mx-auto w-full max-w-7xl space-y-7">
+      <header className="space-y-1">
+        <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-text-muted">
+          <ImageIcon className="size-4" />
+          Workspace
         </div>
 
-        <Button onClick={() => setCreating(true)}>
-          <Plus size={16} />
-          Add signature
-        </Button>
+        <h1 className="text-2xl font-semibold tracking-tight text-text">
+          Assets
+        </h1>
+
+        <p className="max-w-xl text-sm leading-6 text-text-muted">
+          Your reusable signatures and personal handwriting styles, organized in
+          one place.
+        </p>
       </header>
 
-      {creating && (
-        <div className="space-y-4 rounded-xl border border-border bg-surface p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="font-semibold text-text">Create signature</h2>
+      <div className="flex gap-6 border-b border-border">
+        <AssetTab
+          active={activeSection === "signatures"}
+          icon={<FileSignature className="size-4" />}
+          label="Signatures"
+          count={signatures.length}
+          onClick={() => setActiveSection("signatures")}
+        />
 
-              <p className="mt-1 text-xs text-text-muted">
-                Draw your signature and save it for reuse.
+        <AssetTab
+          active={activeSection === "handwriting"}
+          icon={<PenLine className="size-4" />}
+          label="Handwriting"
+          onClick={() => setActiveSection("handwriting")}
+        />
+      </div>
+
+      {error && (
+        <div
+          role="alert"
+          className="flex items-start justify-between gap-3 rounded-lg border border-red-500/30 bg-red-500/5 px-4 py-3 text-sm text-red-600"
+        >
+          <span>{error}</span>
+          <button
+            type="button"
+            aria-label="Dismiss error"
+            onClick={() => setError(null)}
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+      )}
+
+      {activeSection === "handwriting" ? (
+        <HandwritingLibrary onOpenProfile={openHandwritingProfile} />
+      ) : (
+        <section className="space-y-6">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div className="space-y-1">
+              <h2 className="text-lg font-semibold text-text">
+                Saved signatures
+              </h2>
+              <p className="text-sm text-text-muted">
+                Reuse your saved signatures when filling documents.
               </p>
             </div>
 
             <button
               type="button"
               onClick={() => {
-                setCreating(false);
-                setSignatureName("");
+                setIsCreating((value) => !value);
+                setError(null);
               }}
-              aria-label="Close signature editor"
-              className="text-text-muted hover:text-text"
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-brand px-4 text-sm font-medium text-white hover:opacity-90"
             >
-              <X size={18} />
+              {isCreating ? (
+                <X className="size-4" />
+              ) : (
+                <Plus className="size-4" />
+              )}
+              {isCreating ? "Cancel" : "Add signature"}
             </button>
           </div>
-          <FormField message={error ?? null}>
-            <FormField.Label>Signature name</FormField.Label>
-            <FormField.Control>
-              <Input
-                id="signature-name"
-                value={signatureName}
-                onChange={(event) => setSignatureName(event.target.value)}
-                size="sm"
-                className="rounded-lg"
-                placeholder="e.g. Primary signature"
-                maxLength={80}
+
+          {isCreating && (
+            <div className="rounded-xl border border-border bg-surface p-4 sm:p-5">
+              <div className="mb-4">
+                <h3 className="text-sm font-semibold text-text">
+                  Create a signature
+                </h3>
+                <p className="mt-1 text-xs text-text-muted">
+                  Draw your signature below and give it a recognizable name.
+                </p>
+              </div>
+
+              <div className="mb-4">
+                <label className="mb-2 block text-xs font-medium text-text-muted">
+                  Signature name
+                </label>
+                <input
+                  value={signatureName}
+                  onChange={(event) => setSignatureName(event.target.value)}
+                  placeholder="e.g. Primary signature"
+                  maxLength={60}
+                  className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-text outline-none focus:border-brand sm:max-w-sm"
+                />
+              </div>
+
+              <SignaturePad
+                onSaveDrawing={handleSaveSignature}
+                onCancel={() => setIsCreating(false)}
               />
-            </FormField.Control>
-          </FormField>
+            </div>
+          )}
 
-          <SignaturePad
-            onSave={() => {
-              setError("Please use the drawing save action.");
-            }}
-            onSaveDrawing={handleSaveSignature}
-            onCancel={() => {
-              setCreating(false);
-              setSignatureName("");
-            }}
-          />
-        </div>
+          {isLoading ? (
+            <div className="flex min-h-48 items-center justify-center">
+              <LoaderCircle className="size-5 animate-spin text-text-muted" />
+              <span className="ml-2 text-sm text-text-muted">
+                Loading signatures...
+              </span>
+            </div>
+          ) : signatures.length === 0 ? (
+            <div className="flex min-h-64 flex-col items-center justify-center rounded-xl border border-dashed border-border px-6 py-12 text-center">
+              <div className="mb-4 flex size-12 items-center justify-center rounded-xl bg-surface">
+                <FileSignature className="size-5 text-text-muted" />
+              </div>
+
+              <h3 className="font-medium text-text">No saved signatures</h3>
+
+              <p className="mt-2 max-w-sm text-sm leading-6 text-text-muted">
+                Save a signature once and reuse it across your documents without
+                drawing it again.
+              </p>
+
+              <button
+                type="button"
+                onClick={() => setIsCreating(true)}
+                className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-brand hover:underline"
+              >
+                <Plus className="size-4" />
+                Create your first signature
+              </button>
+            </div>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {signatures.map((signature) => (
+                <SignatureAssetCard
+                  key={signature.id}
+                  signature={signature}
+                  onDelete={() => void handleDeleteSignature(signature.id)}
+                  onRename={handleRenameSignature}
+                />
+              ))}
+            </div>
+          )}
+        </section>
       )}
-
-      {loading ? (
-        <p className="py-12 text-center text-sm text-text-muted">
-          Loading assets...
-        </p>
-      ) : signatures.length === 0 && !creating ? (
-        <div className="rounded-xl border border-dashed border-border bg-surface px-6 py-14 text-center">
-          <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-xl bg-surface-raised text-text-muted">
-            <Images size={22} />
-          </div>
-
-          <h2 className="text-sm font-semibold text-text">
-            No saved signatures yet
-          </h2>
-
-          <p className="mx-auto mt-2 max-w-sm text-xs leading-5 text-text-muted">
-            Create a signature once and reuse it across your documents.
-          </p>
-
-          <Button className="mt-5" onClick={() => setCreating(true)}>
-            <Plus size={15} />
-            Create signature
-          </Button>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {signatures.map((signature) => (
-            <SignatureCard
-              key={signature.id}
-              signature={signature}
-              onDelete={handleDeleteSignature}
-              onRename={handleRenameSignature}
-            />
-          ))}
-        </div>
-      )}
-    </section>
+    </div>
   );
 }
 
-function SignatureCard({
+interface AssetTabProps {
+  active: boolean;
+  icon: React.ReactNode;
+  label: string;
+  count?: number;
+  onClick: () => void;
+}
+
+function AssetTab({ active, icon, label, count, onClick }: AssetTabProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-current={active ? "page" : undefined}
+      className={`relative flex h-12 items-center gap-2 border-b-2 text-sm font-medium transition-colors ${
+        active
+          ? "border-brand text-text"
+          : "border-transparent text-text-muted hover:text-text"
+      }`}
+    >
+      {icon}
+      {label}
+
+      {count !== undefined && (
+        <span className="rounded-md bg-surface px-1.5 py-0.5 text-[10px] text-text-muted">
+          {count}
+        </span>
+      )}
+    </button>
+  );
+}
+
+interface SignatureAssetCardProps {
+  signature: SignatureAsset;
+  onDelete: () => void;
+}
+
+function SignatureAssetCard({
   signature,
   onDelete,
   onRename,

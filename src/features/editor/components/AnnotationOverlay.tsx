@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import {  useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import type {
@@ -30,6 +30,8 @@ import {
   createPositionUpdate,
   positionsEqual,
 } from "../utils/annotation-overlay.utils";
+import { usePortalRoot } from "@/hooks/usePortalRoot";
+import { composeRefs } from "@/utils/composeRefs";
 
 interface AnnotationOverlayProps {
   pageId: string;
@@ -62,8 +64,6 @@ export function AnnotationOverlay({
   onCreate,
   onChangeType,
 }: AnnotationOverlayProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-
   const annotations = useAnnotationStore((state) => state.annotations);
   const selectedId = useAnnotationStore((state) => state.selectedAnnotationId);
   const selectAnnotation = useAnnotationStore(
@@ -77,9 +77,16 @@ export function AnnotationOverlay({
   const [editingSignatureId, setEditingSignatureId] = useState<string | null>(
     null,
   );
-  const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
+
+  const dragContainerRef = useRef<HTMLDivElement>(null);
 
   const registerTap = useDoubleTap();
+  const { portalRoot, containerRef: portalContainerRef } = usePortalRoot();
+
+  const containerRef = useMemo(
+    () => composeRefs(portalContainerRef, dragContainerRef),
+    [portalContainerRef, dragContainerRef],
+  );
 
   const pageAnnotations = useMemo(
     () =>
@@ -99,7 +106,7 @@ export function AnnotationOverlay({
     handlePointerCancel,
     handleLostPointerCapture,
   } = useAnnotationDrag({
-    containerRef,
+    containerRef: dragContainerRef,
     annotations: pageAnnotations,
     onPreviewPosition: updatePosition,
     onCommit: onUpdate,
@@ -114,17 +121,10 @@ export function AnnotationOverlay({
     (annotation) => annotation.id === selectedId,
   );
 
-  useEffect(() => {
-    setPortalRoot(
-      containerRef.current?.closest<HTMLElement>("[data-kreativ-theme]") ??
-        null,
-    );
-  }, []);
-
   async function createDefaultAnnotation(event: React.PointerEvent) {
-    if (disabled || !onCreate || !containerRef.current) return;
+    if (disabled || !onCreate || !dragContainerRef.current) return;
 
-    const bounds = containerRef.current.getBoundingClientRect();
+    const bounds = dragContainerRef.current.getBoundingClientRect();
     if (!bounds.width || !bounds.height) return;
 
     const size = DEFAULT_SIZE[DEFAULT_TYPE];

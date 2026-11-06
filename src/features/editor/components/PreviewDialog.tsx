@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X } from "lucide-react";
+import { Download, LoaderCircle, X } from "lucide-react";
 import { Button } from "@splenddev/kreativ-ui/components";
 
 import type { DocumentPage } from "@/features/documents/domain/document.types";
@@ -11,23 +11,16 @@ import { PdfDocumentViewer } from "./PdfDocumentViewer";
 interface PreviewDialogProps {
   documentId: string;
   documentName: string;
-  /** The working PDF. */
   blob: Blob;
-  /** Pages in display order. */
   pages: DocumentPage[];
-  /** 1-based page to open on. */
   initialPage: number;
   onClose: () => void;
+  onExport: () => Promise<void>;
 }
 
 const noop = () => {};
 const noopAsync = async () => {};
 
-/**
- * Full-screen, read-only view of the finished document: the PDF with the
- * current annotations drawn on it and none of the editing chrome. It reads the
- * live annotation store, so unsaved edits show up too.
- */
 export function PreviewDialog({
   documentId,
   documentName,
@@ -35,8 +28,11 @@ export function PreviewDialog({
   pages,
   initialPage,
   onClose,
+  onExport,
 }: PreviewDialogProps) {
   const [pageNumber, setPageNumber] = useState(initialPage);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -47,6 +43,21 @@ export function PreviewDialog({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
 
+  async function handleExport() {
+    try {
+      setIsExporting(true);
+      setExportError(null);
+
+      await onExport();
+    } catch (error) {
+      setExportError(
+        error instanceof Error ? error.message : "Failed to export PDF.",
+      );
+    } finally {
+      setIsExporting(false);
+    }
+  }
+
   const page = pages[pageNumber - 1];
 
   if (!page) return null;
@@ -56,7 +67,7 @@ export function PreviewDialog({
       role="dialog"
       aria-modal="true"
       aria-label={`Preview of ${documentName}`}
-      className="fixed inset-0 z-50 flex flex-col bg-background text-text"
+      className="absolute inset-0 z-50 flex flex-col bg-background text-text"
     >
       <div className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border bg-surface px-3 sm:px-4">
         <div className="min-w-0">
@@ -64,19 +75,34 @@ export function PreviewDialog({
           <p className="text-xs text-text-muted">Preview · read-only</p>
         </div>
 
-        <Button
-          type="button"
-          size="sm"
-          iconOnly
-          variant="ghost"
-          color="neutral"
-          autoFocus
-          onClick={onClose}
-          aria-label="Close preview"
-          className="shrink-0 text-text-muted hover:text-text"
-        >
-          <X size={18} />
-        </Button>
+        <div className="flex shrink-0 items-center gap-2">
+          <Button
+            type="button"
+            size="sm"
+            disabled={isExporting}
+            onClick={handleExport}
+          >
+            {isExporting ? (
+              <LoaderCircle size={16} className="animate-spin" />
+            ) : (
+              <Download size={16} />
+            )}
+            <span>{isExporting ? "Exporting..." : "Export PDF"}</span>
+          </Button>
+
+          <Button
+            type="button"
+            size="sm"
+            iconOnly
+            variant="ghost"
+            color="neutral"
+            onClick={onClose}
+            aria-label="Close preview"
+            className="shrink-0 text-text-muted hover:text-text"
+          >
+            <X size={18} />
+          </Button>
+        </div>
       </div>
 
       <PdfDocumentViewer

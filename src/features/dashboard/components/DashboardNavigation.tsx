@@ -20,7 +20,7 @@ export function DashboardNavigation({ activeTab }: DashboardNavigationProps) {
   return (
     <nav
       aria-label="Dashboard navigation"
-      className="flex items-center gap-1 overflow-x-auto border-b border-border px-2 sticky top-16 bg-background z-10"
+      className="flex items-center gap-1 overflow-x-auto border-b border-border px-2 sticky top-16 bg-background z-10 scrollbar-none"
     >
       {DASHBOARD_TABS.map((tab) => {
         const Icon = icons[tab.id];

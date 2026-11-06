@@ -36,6 +36,9 @@ const EDGE_HANDLES_SIZES: Record<"n" | "s" | "e" | "w", string> = {
   e: "h-7 w-2",
 };
 
+/** Default fill while editing, so empty fields are visible on the page. */
+const EDITOR_BACKGROUND = "rgba(59,130,246,0.04)";
+
 const CORNERS = Object.keys(CORNER_HANDLES) as (keyof typeof CORNER_HANDLES)[];
 
 const EDGES = Object.keys(EDGE_HANDLES) as (keyof typeof EDGE_HANDLES)[];
@@ -113,11 +116,14 @@ export function AnnotationBox({
         selected && isInteracting
           ? "after:pointer-events-none after:absolute after:inset-0 after:border after:border-brand after:content-['']"
           : "",
-        !selected && !disabled
+        !selected && !disabled && !preview
           ? "hover:after:pointer-events-none hover:after:absolute hover:after:inset-0 hover:after:border hover:after:border-brand/50 hover:after:content-['']"
           : "",
-        "focus-visible:ring-1 focus-visible:ring-brand focus-visible:ring-offset-1",
-      ].join(" ")}
+        !preview &&
+          "focus-visible:ring-1 focus-visible:ring-brand focus-visible:ring-offset-1",
+      ]
+        .filter(Boolean)
+        .join(" ")}
     >
       <div
         style={{
@@ -127,10 +133,15 @@ export function AnnotationBox({
           color: annotation.style.color ?? "#111827",
           textAlign: annotation.style.textAlign ?? "right",
 
+          // The faint blue tint is an editing aid. In the preview, only a
+          // background the user explicitly set is drawn.
           backgroundColor: isCheckbox
             ? "transparent"
-            : (annotation.style.backgroundColor ?? "rgba(59,130,246,0.04)"),
+            : (annotation.style.backgroundColor ??
+              (preview ? "transparent" : EDITOR_BACKGROUND)),
 
+          // Border only exists when the user gave it a width. Color alone
+          // never draws one, and nothing is drawn by default.
           borderColor: annotation.style.borderColor ?? "transparent",
           borderWidth: annotation.style.borderWidth ?? 0,
           borderStyle: annotation.style.borderStyle ?? "solid",

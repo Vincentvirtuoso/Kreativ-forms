@@ -1,6 +1,12 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+
 import type { AnnotationStyle } from "../../domain/annotation.types";
 import { clamp } from "../../utils/annotation-overlay.utils";
 import { FONT_FAMILY_OPTIONS } from "../../utils/font-family-constants";
+import { loadHandwritingFonts } from "@/features/handwriting/services/handwriting-font-loader.service";
+
 import { PropertyInput, PropertySelect } from "../PropertyFields";
 
 const FONT_WEIGHTS = [
@@ -23,6 +29,31 @@ export function TypographySection({
   style,
   onStyleChange,
 }: TypographySectionProps) {
+  const [handwritingFonts, setHandwritingFonts] = useState<
+    { value: string; label: string }[]
+  >([]);
+
+  useEffect(() => {
+    let active = true;
+
+    loadHandwritingFonts()
+      .then((fonts) => {
+        if (active) setHandwritingFonts(fonts);
+      })
+      .catch((error) => {
+        console.error("Unable to load handwriting fonts:", error);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const fontOptions = useMemo(
+    () => [...FONT_FAMILY_OPTIONS, ...handwritingFonts],
+    [handwritingFonts],
+  );
+
   return (
     <div className="border-t border-border pt-4">
       <h4 className="mb-3 text-xs font-medium text-text-muted">Typography</h4>
@@ -32,7 +63,7 @@ export function TypographySection({
           label="Font family"
           value={style.fontFamily ?? "inherit"}
           onChange={(fontFamily) => onStyleChange({ fontFamily })}
-          options={FONT_FAMILY_OPTIONS}
+          options={fontOptions}
         />
 
         <PropertyInput
@@ -42,7 +73,9 @@ export function TypographySection({
           max={120}
           value={String(style.fontSize ?? 14)}
           onChange={(value) =>
-            onStyleChange({ fontSize: clamp(Number(value) || 1, 1, 120) })
+            onStyleChange({
+              fontSize: clamp(Number(value) || 1, 1, 120),
+            })
           }
         />
 

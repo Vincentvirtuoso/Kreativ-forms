@@ -9,6 +9,7 @@ import type { SignatureRepository } from "../repositories/signature.repository";
 
 import { validateSignatureInput } from "../domain/signature.rules";
 import { dataUrlToBlob } from "../utils/signature-converter";
+import { dexieDocumentStore } from "@/infrastructure/storage/browser/dexie-document.store";
 
 export interface SignatureDrawingInput {
   png: string;
@@ -64,3 +65,7 @@ export class SignatureService {
     return this.repository.delete(id);
   }
 }
+
+export const signatureService = new SignatureService(
+  dexieDocumentStore.signatures,
+);

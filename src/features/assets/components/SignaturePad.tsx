@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
-import { Check, Eraser, Undo2, X } from "lucide-react";
+import { Check, Eraser, SavePen, SavePlus, Undo2, X } from "lucide-react";
 import { Button } from "@splenddev/kreativ-ui/components";
 
 import ColorPicker from "@/components/ui/color-picker";
@@ -15,21 +15,21 @@ import {
   PenSettings,
   type SignaturePoint,
   type SignatureStroke,
-} from "../../utils/signature-geometry";
+} from "../../editor/utils/signature-geometry";
 import {
   createBaseLayer,
   exportSignature,
   paintSignature,
   type BaseLayer,
-} from "../../utils/signature-export";
+} from "../../editor/utils/signature-export";
 
-export type { SignatureDrawing } from "../../utils/signature-export";
-import type { SignatureDrawing } from "../../utils/signature-export";
-import { PenControls } from "./PenControls";
+export type { SignatureDrawing } from "../../editor/utils/signature-export";
+import type { SignatureDrawing } from "../../editor/utils/signature-export";
+import { PenControls } from "../../editor/components/annotations/PenControls";
 
 interface SignaturePadProps {
   initialValue?: string | null;
-  onSave: (signature: string) => void;
+  onSave?: (signature: string) => void;
   onSaveDrawing?: (drawing: SignatureDrawing) => void;
   onCancel: () => void;
   onSaveToLibrary?: (drawing: SignatureDrawing) => void;
@@ -208,7 +208,7 @@ export function SignaturePad({
       onSaveDrawing(drawing);
       return;
     }
-    onSave(drawing.png);
+    onSave?.(drawing.png);
   }
 
   function handleSaveToLibrary() {
@@ -306,8 +306,10 @@ export function SignaturePad({
               color="neutral"
               disabled={!hasInk}
               onClick={handleSaveToLibrary}
+              title="s"
             >
-              Save to library
+              <SavePlus />
+              <span className="hidden sm:block">Save to Library</span>
             </Button>
           )}
           <Button type="button" disabled={!hasInk} onClick={handleSave}>

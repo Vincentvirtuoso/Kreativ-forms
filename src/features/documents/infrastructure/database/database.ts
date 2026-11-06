@@ -9,9 +9,10 @@ import type {
 import type { Annotation } from "@/features/editor/domain/annotation.types";
 
 import type { SignatureAsset } from "@/features/assets/domain/signature.types";
+import type { HandwritingProfile } from "@/features/handwriting/domain/handwriting-profile.types";
 
 export const DATABASE_NAME = "kreativ-forms";
-export const DATABASE_VERSION = 2;
+export const DATABASE_VERSION = 3;
 
 export interface SyncOutboxEntry {
   id: string;
@@ -48,6 +49,7 @@ export class KreativFormsDatabase extends Dexie {
   assets!: Table<StoredDocumentAsset, string>;
   annotations!: Table<Annotation, string>;
   signatures!: Table<SignatureAsset, string>;
+  handwritingProfiles!: Table<HandwritingProfile, string>;
 
   collections!: Table<CollectionRecord, string>;
   settings!: Table<SettingRecord, string>;
@@ -120,6 +122,47 @@ export class KreativFormsDatabase extends Dexie {
 
       settings: "key",
 
+      devices: "id, lastActiveAt",
+
+      outbox: [
+        "id",
+        "entityType",
+        "entityId",
+        "createdAt",
+        "[entityType+createdAt]",
+      ].join(", "),
+    });
+
+    this.version(DATABASE_VERSION).stores({
+      documents: [
+        "id",
+        "status",
+        "persistence",
+        "updatedAt",
+        "deletedAt",
+        "collectionId",
+        "sync.status",
+        "[status+updatedAt]",
+      ].join(", "),
+
+      pages: ["id", "documentId", "[documentId+order]"].join(", "),
+
+      assets: ["id", "documentId", "[documentId+type]"].join(", "),
+
+      annotations: [
+        "id",
+        "documentId",
+        "pageId",
+        "[documentId+pageId]",
+        "updatedAt",
+      ].join(", "),
+
+      signatures: "id, name, createdAt, updatedAt",
+
+      handwritingProfiles: "id, name, status, createdAt, updatedAt",
+
+      collections: "id, name, updatedAt",
+      settings: "key",
       devices: "id, lastActiveAt",
 
       outbox: [

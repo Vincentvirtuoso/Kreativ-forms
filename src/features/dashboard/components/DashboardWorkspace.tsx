@@ -12,7 +12,7 @@ interface DashboardWorkspaceProps {
 
 export function DashboardWorkspace({ activeTab }: DashboardWorkspaceProps) {
   return (
-    <div className="space-y-6" data-kui-full-bleed>
+    <div className="space-y-6 pb-6" data-kui-full-bleed>
       <DashboardNavigation activeTab={activeTab} />
 
       <div key={activeTab} className="px-4 md:px-6">
