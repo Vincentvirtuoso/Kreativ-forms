@@ -8,8 +8,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <UIProvider>
       <SettingsProvider>
         <ConfirmProvider>
-         {/* <AppShell>{children} </AppShell>*/}
-{children}
+         <AppShell>{children} </AppShell>
         </ConfirmProvider>
       </SettingsProvider>
     </UIProvider>
