@@ -21,7 +21,9 @@ export const AppShell = ({ children }: AppShellProps) => {
         } as React.CSSProperties
       }
     >
-      <Sidebar isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} />
+      <Suspense fallback={<SidebarSkeleton collapsed={isCollapsed} />}>
+        <Sidebar isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} />
+      </Suspense>
 
       <main className="flex min-h-screen min-w-0 flex-1 flex-col">
         <header
@@ -51,3 +53,12 @@ export const AppShell = ({ children }: AppShellProps) => {
     </div>
   );
 };
+
+function SidebarSkeleton({ collapsed }: { collapsed: boolean }) {
+  return (
+    <aside
+      className="sticky top-0 hidden h-screen shrink-0 border-r border-border bg-surface md:flex"
+      style={{ width: collapsed ? 72 : 260 }}
+    />
+  );
+}
