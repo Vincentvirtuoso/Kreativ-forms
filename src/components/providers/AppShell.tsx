@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, Suspense } from "react";
 
 import UserMenu from "../layout/user-menu";
 import Sidebar from "../layout/Sidebar";
