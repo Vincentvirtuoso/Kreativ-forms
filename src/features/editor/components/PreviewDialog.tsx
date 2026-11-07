@@ -15,11 +15,19 @@ interface PreviewDialogProps {
   pages: DocumentPage[];
   initialPage: number;
   onClose: () => void;
-  onExport: () => Promise<void>;
+  onExport: (pageIds?: string[]) => Promise<void>;
 }
+type ExportMode = "all" | "current" | "selected";
 
 const noop = () => {};
 const noopAsync = async () => {};
+function togglePageSelection(pageId: string) {
+  setSelectedPageIds((current) =>
+    current.includes(pageId)
+      ? current.filter((id) => id !== pageId)
+      : [...current, pageId],
+  );
+}
 
 export function PreviewDialog({
   documentId,
@@ -33,6 +41,9 @@ export function PreviewDialog({
   const [pageNumber, setPageNumber] = useState(initialPage);
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [exportMode, setExportMode] = useState<ExportMode>("all");
+
+const [selectedPageIds, setSelectedPageIds] = useState<string[]>([]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -44,19 +55,30 @@ export function PreviewDialog({
   }, [onClose]);
 
   async function handleExport() {
-    try {
-      setIsExporting(true);
-      setExportError(null);
+  try {
+    setIsExporting(true);
+    setExportError(null);
 
-      await onExport();
-    } catch (error) {
-      setExportError(
-        error instanceof Error ? error.message : "Failed to export PDF.",
-      );
-    } finally {
-      setIsExporting(false);
+    const pageIds =
+      exportMode === "all"
+        ? undefined
+        : exportMode === "current"
+          ? [page.id]
+          : selectedPageIds;
+
+    if (exportMode === "selected" && !selectedPageIds.length) {
+      throw new Error("Select at least one page to export.");
     }
+
+    await onExport(pageIds);
+  } catch (error) {
+    setExportError(
+      error instanceof Error ? error.message : "Failed to export PDF.",
+    );
+  } finally {
+    setIsExporting(false);
   }
+}
 
   const page = pages[pageNumber - 1];
 
@@ -104,6 +126,49 @@ export function PreviewDialog({
           </Button>
         </div>
       </div>
+<div className="flex flex-col gap-3 border-t border-border p-3">
+  <p className="text-sm font-medium">Export pages</p>
+
+  <div className="flex flex-wrap gap-2">
+    {([
+      ["all", "All pages"],
+      ["current", "Current page"],
+      ["selected", "Selected pages"],
+    ] as const).map(([value, label]) => (
+      <button
+        key={value}
+        type="button"
+        onClick={() => setExportMode(value)}
+        className={cn(
+          "rounded-md border px-3 py-1.5 text-xs transition-colors",
+          exportMode === value
+            ? "border-foreground bg-surface-muted text-foreground"
+            : "border-border text-text-muted hover:bg-surface-muted",
+        )}
+      >
+        {label}
+      </button>
+    ))}
+  </div>
+
+  {exportMode === "selected" && (
+    <div className="grid grid-cols-4 gap-2">
+      {pages.map((item, index) => (
+        <label
+          key={item.id}
+          className="flex items-center gap-2 rounded-md border border-border p-2 text-xs"
+        >
+          <input
+            type="checkbox"
+            checked={selectedPageIds.includes(item.id)}
+            onChange={() => togglePageSelection(item.id)}
+          />
+          Page {index + 1}
+        </label>
+      ))}
+    </div>
+  )}
+</div>
 
       <PdfDocumentViewer
         blob={blob}
