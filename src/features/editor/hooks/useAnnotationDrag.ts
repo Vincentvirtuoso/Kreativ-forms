@@ -7,12 +7,15 @@ import type {
   AnnotationPosition,
   AnnotationUpdate,
 } from "../domain/annotation.types";
+
 import { ANNOTATION_RULES } from "../domain/annotation.rules";
+
 import {
   computePosition,
   createPositionUpdate,
   positionsEqual,
 } from "../utils/annotation-overlay.utils";
+
 import {
   resizeFromHandle,
   snapMove,
@@ -41,22 +44,11 @@ const NO_GUIDES: SnapGuides = { x: [], y: [] };
 
 interface UseAnnotationDragOptions {
   containerRef: RefObject<HTMLDivElement | null>;
-  /** Annotations on the current page (used for snapping to neighbours). */
   annotations: Annotation[];
   onPreviewPosition: (id: string, position: AnnotationPosition) => void;
   onCommit: (id: string, update: AnnotationUpdate) => void;
 }
 
-/**
- * Pointer-driven move and resize for annotations.
- *
- *  - Move snaps to the page edges / centre and to other annotations.
- *    Hold Alt to move freely.
- *  - Resize works from all 8 handles. Hold Shift to keep the proportions
- *    (checkboxes always do).
- *  - Sizes always respect ANNOTATION_RULES, so a drag can never produce a
- *    position the validator rejects.
- */
 export function useAnnotationDrag({
   containerRef,
   annotations,
@@ -70,16 +62,16 @@ export function useAnnotationDrag({
   const [guides, setGuides] = useState<SnapGuides>(NO_GUIDES);
 
   function resetDrag(pointerId?: number) {
+    const container = containerRef.current;
+
     dragRef.current = null;
     previewRef.current = null;
+
     setPreview(null);
     setGuides(NO_GUIDES);
 
-    if (
-      pointerId !== undefined &&
-      containerRef.current?.hasPointerCapture(pointerId)
-    ) {
-      containerRef.current.releasePointerCapture(pointerId);
+    if (pointerId !== undefined && container?.hasPointerCapture(pointerId)) {
+      container.releasePointerCapture(pointerId);
     }
   }
 
@@ -89,6 +81,21 @@ export function useAnnotationDrag({
     mode: "move" | "resize",
     handle: ResizeHandle = "se",
   ) {
+    const container = containerRef.current;
+
+    if (!container || !event.isPrimary || event.button !== 0) {
+      return;
+    }
+
+    event.preventDefault();
+
+    // Cancel any previous interaction.
+    if (dragRef.current) {
+      resetDrag(dragRef.current.pointerId);
+    }
+
+    const initialPosition = { ...annotation.position };
+
     dragRef.current = {
       id: annotation.id,
       type: annotation.type,
@@ -97,31 +104,36 @@ export function useAnnotationDrag({
       pointerId: event.pointerId,
       startX: event.clientX,
       startY: event.clientY,
-      initialPosition: { ...annotation.position },
+      initialPosition,
     };
-    previewRef.current = { ...annotation.position };
+
+    previewRef.current = initialPosition;
 
     setPreview({
       id: annotation.id,
       mode,
-      position: { ...annotation.position },
+      position: initialPosition,
     });
 
-    containerRef.current?.setPointerCapture(event.pointerId);
+    setGuides(NO_GUIDES);
+
+    container.setPointerCapture(event.pointerId);
   }
 
   function handlePointerMove(event: React.PointerEvent<HTMLDivElement>) {
     const drag = dragRef.current;
+    const container = containerRef.current;
 
-    if (!drag || drag.pointerId !== event.pointerId || !containerRef.current) {
+    if (!drag || drag.pointerId !== event.pointerId || !container) {
       return;
     }
 
-    const bounds = containerRef.current.getBoundingClientRect();
+    const bounds = container.getBoundingClientRect();
 
     if (!bounds.width || !bounds.height) return;
 
     const deltaX = ((event.clientX - drag.startX) / bounds.width) * 100;
+
     const deltaY = ((event.clientY - drag.startY) / bounds.height) * 100;
 
     let next: AnnotationPosition;
@@ -150,12 +162,11 @@ export function useAnnotationDrag({
       if (event.altKey) {
         next = moved;
       } else {
-        const snapped = snapMove(
-          moved,
-          annotations
-            .filter((annotation) => annotation.id !== drag.id)
-            .map((annotation) => annotation.position),
-        );
+        const otherPositions = annotations
+          .filter((annotation) => annotation.id !== drag.id)
+          .map((annotation) => annotation.position);
+
+        const snapped = snapMove(moved, otherPositions);
 
         next = snapped.position;
         nextGuides = snapped.guides;
@@ -163,7 +174,13 @@ export function useAnnotationDrag({
     }
 
     previewRef.current = next;
-    setPreview({ id: drag.id, mode: drag.mode, position: next });
+
+    setPreview({
+      id: drag.id,
+      mode: drag.mode,
+      position: next,
+    });
+
     setGuides(nextGuides);
   }
 
@@ -181,17 +198,22 @@ export function useAnnotationDrag({
       return;
     }
 
+    // Persist the final position once, after the interaction.
     onPreviewPosition(drag.id, next);
     onCommit(drag.id, createPositionUpdate(annotation, next));
   }
 
   function handlePointerCancel(event: React.PointerEvent<HTMLDivElement>) {
     if (dragRef.current?.pointerId !== event.pointerId) return;
+
+    // Cancellation must never commit an incomplete transform.
     resetDrag(event.pointerId);
   }
 
   function handleLostPointerCapture(event: React.PointerEvent<HTMLDivElement>) {
-    if (dragRef.current?.pointerId === event.pointerId) resetDrag();
+    if (dragRef.current?.pointerId !== event.pointerId) return;
+
+    resetDrag();
   }
 
   return {
