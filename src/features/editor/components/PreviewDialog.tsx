@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -10,6 +9,8 @@ import { cn } from "@/lib/cn";
 import type { DocumentPage } from "@/features/documents/domain/document.types";
 
 import { PdfDocumentViewer } from "./PdfDocumentViewer";
+import { ExportDialog } from "./ExportDialog";
+import { ExportOptions } from "@/features/documents/services/pdf-export.service";
 
 interface PreviewDialogProps {
   documentId: string;
@@ -18,7 +19,7 @@ interface PreviewDialogProps {
   pages: DocumentPage[];
   initialPage: number;
   onClose: () => void;
-  onExport: (pageIds?: string[]) => Promise<void>;
+  onExport: (options: ExportOptions) => Promise<void>;
 }
 
 type ExportMode = "all" | "current" | "selected";
@@ -40,6 +41,7 @@ export function PreviewDialog({
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportMode, setExportMode] = useState<ExportMode>("all");
   const [selectedPageIds, setSelectedPageIds] = useState<string[]>([]);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
 
   const orderedPages = useMemo(
     () => [...pages].sort((a, b) => a.order - b.order),
@@ -86,12 +88,10 @@ export function PreviewDialog({
         throw new Error("Select at least one page to export.");
       }
 
-      await onExport(pageIds);
+      await onExport({ pageIds });
     } catch (error) {
       setExportError(
-        error instanceof Error
-          ? error.message
-          : "Failed to export PDF.",
+        error instanceof Error ? error.message : "Failed to export PDF.",
       );
     } finally {
       setIsExporting(false);
@@ -110,34 +110,19 @@ export function PreviewDialog({
       {/* Header */}
       <div className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border bg-surface px-3 sm:px-4">
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium">
-            {documentName}
-          </p>
+          <p className="truncate text-sm font-medium">{documentName}</p>
 
-          <p className="text-xs text-text-muted">
-            Preview · read-only
-          </p>
+          <p className="text-xs text-text-muted">Preview · read-only</p>
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
           <Button
             type="button"
             size="sm"
-            disabled={isExporting}
-            onClick={handleExport}
+            onClick={() => setExportDialogOpen(true)}
           >
-            {isExporting ? (
-              <LoaderCircle
-                size={16}
-                className="animate-spin"
-              />
-            ) : (
-              <Download size={16} />
-            )}
-
-            <span>
-              {isExporting ? "Exporting..." : "Export PDF"}
-            </span>
+            <Download size={16} />
+            <span>Export PDF</span>
           </Button>
 
           <Button
@@ -157,87 +142,14 @@ export function PreviewDialog({
       </div>
 
       {/* Export options */}
-      <div className="flex shrink-0 flex-col gap-3 border-b border-border bg-surface px-3 py-3 sm:px-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm font-medium">
-            Export pages
-          </p>
-
-          <p className="text-xs text-text-muted">
-            {exportMode === "all"
-              ? `${orderedPages.length} pages`
-              : exportMode === "current"
-                ? `Page ${pageNumber}`
-                : `${selectedPageIds.length} selected`}
-          </p>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          {(
-            [
-              ["all", "All pages"],
-              ["current", "Current page"],
-              ["selected", "Selected pages"],
-            ] as const
-          ).map(([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              disabled={isExporting}
-              onClick={() => {
-                setExportMode(value);
-                setExportError(null);
-              }}
-              aria-pressed={exportMode === value}
-              className={cn(
-                "rounded-md border px-3 py-1.5 text-xs transition-colors",
-                "disabled:cursor-not-allowed disabled:opacity-50",
-                exportMode === value
-                  ? "border-foreground bg-surface-muted text-foreground"
-                  : "border-border text-text-muted hover:bg-surface-muted",
-              )}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {exportMode === "selected" && (
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
-            {orderedPages.map((item, index) => (
-              <label
-                key={item.id}
-                className={cn(
-                  "flex cursor-pointer items-center gap-2 rounded-md border p-2 text-xs transition-colors",
-                  selectedPageIds.includes(item.id)
-                    ? "border-foreground bg-surface-muted"
-                    : "border-border hover:bg-surface-muted",
-                )}
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedPageIds.includes(item.id)}
-                  disabled={isExporting}
-                  onChange={() => togglePageSelection(item.id)}
-                  className="accent-current"
-                />
-
-                <span>Page {index + 1}</span>
-              </label>
-            ))}
-          </div>
-        )}
-
-        {exportError && (
-          <p
-            role="alert"
-            className="text-xs text-red-500"
-          >
-            {exportError}
-          </p>
-        )}
-      </div>
-
+      <ExportDialog
+        open={exportDialogOpen}
+        documentName={documentName}
+        pages={orderedPages}
+        currentPageId={page.id}
+        onClose={() => setExportDialogOpen(false)}
+        onExport={onExport}
+      />
       {/* PDF viewer */}
       <div className="min-h-0 flex-1">
         <PdfDocumentViewer

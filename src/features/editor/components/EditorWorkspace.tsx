@@ -29,7 +29,10 @@ import type {
 import { DocumentPersistenceService } from "@/features/documents/services/document-persistence.service";
 import { useDocumentSaveGuard } from "../hooks/useDocumentSaveGuard";
 import { PreviewDialog } from "./PreviewDialog";
-import { PdfExportService } from "@/features/documents/services/pdf-export.service";
+import {
+  ExportOptions,
+  PdfExportService,
+} from "@/features/documents/services/pdf-export.service";
 import { DocumentLoaderService } from "@/features/documents/services/document-loader.service";
 import { getHandwritingProfileRepository } from "@/features/handwriting/repositories/handwriting-repository.factory";
 import { downloadPdf } from "@/features/documents/utils/pdf-download.util";
@@ -304,38 +307,38 @@ export function EditorWorkspace({
     handleAnnotationUpdate(update);
   }
 
-  async function handleExport(pageIds?: PageId[]): Promise<void> {
-  if (annotationsLoading || exporting) {
-    throw new Error("Please wait until annotations are ready.");
-  }
-
-  setExporting(true);
-  setAnnotationError(null);
-
-  try {
-    await autosave.flushAll();
-
-    const result = await pdfExportService.export(document.id, {
-      pageIds,
-    });
-
-    downloadPdf(result.blob, result.filename);
-
-    // Only mark the document completed when exporting the entire document.
-    if (!pageIds) {
-      await repositories.documents.update(document.id, {
-        status: "completed",
-        completedAt: new Date().toISOString(),
-      });
+  async function handleExport(options: ExportOptions): Promise<void> {
+    if (annotationsLoading || exporting) {
+      throw new Error("Please wait until annotations are ready.");
     }
-  } catch (error) {
-    console.error("PDF export failed:", error);
-    throw error;
-  } finally {
-    setExporting(false);
-  }
-}
 
+    setExporting(true);
+    setAnnotationError(null);
+
+    try {
+      await autosave.flushAll();
+
+      const result = await pdfExportService.export(document.id, {
+        filename: options.filename,
+        validateRequired: options.validateRequired,
+        pageIds: options.pageIds,
+      });
+
+      downloadPdf(result.blob, result.filename);
+
+      if (!options.pageIds) {
+        await repositories.documents.update(document.id, {
+          status: "completed",
+          completedAt: new Date().toISOString(),
+        });
+      }
+    } catch (error) {
+      console.error("PDF export failed:", error);
+      throw error;
+    } finally {
+      setExporting(false);
+    }
+  }
   useEffect(() => {
     let active = true;
 
