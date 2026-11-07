@@ -408,16 +408,25 @@ export class DocumentImportService {
       );
     });
 
-    const pages: DocumentPage[] = input.pageMetadata.map((metadata, index) => ({
-      id: crypto.randomUUID(),
-      documentId,
-      sourcePageNumber: metadata.sourcePageNumber,
-      order: index,
-      rotation: 0,
-      width: metadata.width,
-      height: metadata.height,
-      thumbnailAssetId: thumbnailIds.get(metadata.sourcePageNumber),
-    }));
+    const pages: DocumentPage[] = input.pageMetadata.map(
+  (metadata, index) => ({
+    id: crypto.randomUUID(),
+    documentId,
+    sourcePageNumber: metadata.sourcePageNumber,
+    order: index,
+
+    rotation: metadata.rotation,
+
+    width: metadata.width,
+    height: metadata.height,
+
+    viewBox: metadata.viewBox,
+
+    thumbnailAssetId: thumbnailIds.get(
+      metadata.sourcePageNumber,
+    ),
+  }),
+);
 
     if (pages.length !== input.generatedThumbnails.length) {
       throw new Error(
