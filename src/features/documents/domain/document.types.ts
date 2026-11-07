@@ -60,6 +60,13 @@ export interface DocumentPage {
   width: number;
   height: number;
 
+  viewBox: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+
   thumbnailAssetId?: AssetId;
 }
 
