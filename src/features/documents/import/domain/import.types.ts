@@ -39,8 +39,18 @@ export interface ImportFileMetadata {
 
 export interface ImportPageMetadata {
   sourcePageNumber: number;
+
   width: number;
   height: number;
+
+  rotation: 0 | 90 | 180 | 270;
+
+  viewBox: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
 }
 
 export interface ImportProgress {
