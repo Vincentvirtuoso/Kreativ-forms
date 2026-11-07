@@ -2,7 +2,10 @@ import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 
 import type { Annotation } from "@/features/editor/domain/annotation.types";
-import type { DocumentId } from "../domain/document.types";
+import type {
+  DocumentId,
+  PageId,
+} from "../domain/document.types";
 import type { DocumentLoaderService } from "./document-loader.service";
 
 import type { AnnotationRepository } from "@/features/editor/repositories/annotation.repository";
@@ -15,6 +18,9 @@ type PdfFont = Awaited<ReturnType<PDFDocument["embedFont"]>>;
 interface ExportOptions {
   filename?: string;
   validateRequired?: boolean;
+
+  /** Omit to export the entire document. */
+  pageIds?: PageId[];
 }
 
 interface ExportResult {
@@ -29,86 +35,144 @@ export class PdfExportService {
     private readonly handwritingProfiles: HandwritingProfileRepository,
   ) {}
 
-  async export(
-    documentId: DocumentId,
-    options: ExportOptions = {},
-  ): Promise<ExportResult> {
-    const workspace = await this.documents.load(documentId);
+ async export(
+  documentId: DocumentId,
+  options: ExportOptions = {},
+): Promise<ExportResult> {
+  const workspace = await this.documents.load(documentId);
 
-    if (!workspace.workingPdf?.blob) {
-      throw new Error("The working PDF could not be loaded.");
+  if (!workspace.workingPdf?.blob) {
+    throw new Error("The working PDF could not be loaded.");
+  }
+
+  const [allAnnotations, profiles] = await Promise.all([
+    this.annotations.getByDocumentId(documentId),
+    this.handwritingProfiles.getAll(),
+  ]);
+
+  const sourcePdf = await PDFDocument.load(
+    await workspace.workingPdf.blob.arrayBuffer(),
+  );
+
+  const sourcePages = sourcePdf.getPages();
+
+  if (sourcePages.length !== workspace.pages.length) {
+    throw new Error(
+      "The working PDF page count does not match the document pages.",
+    );
+  }
+
+  // Resolve and validate requested pages.
+  const selectedPages = options.pageIds
+    ? (() => {
+        if (options.pageIds!.length === 0) {
+          throw new Error("Select at least one page to export.");
+        }
+
+        const uniqueIds = new Set(options.pageIds);
+
+        if (uniqueIds.size !== options.pageIds.length) {
+          throw new Error("Duplicate pages were selected.");
+        }
+
+        const pages = options.pageIds!.map((id) => {
+          const page = workspace.pages.find((item) => item.id === id);
+
+          if (!page) {
+            throw new Error(`Could not find page "${id}".`);
+          }
+
+          return page;
+        });
+
+        return pages.sort((a, b) => a.order - b.order);
+      })()
+    : [...workspace.pages].sort((a, b) => a.order - b.order);
+
+  // Validate page indexes.
+  for (const page of selectedPages) {
+    if (
+      !Number.isInteger(page.order) ||
+      page.order < 0 ||
+      page.order >= sourcePages.length
+    ) {
+      throw new Error(`Invalid PDF page order for page "${page.id}".`);
+    }
+  }
+
+  const selectedPageIds = new Set(
+    selectedPages.map((page) => page.id),
+  );
+
+  // Only annotations belonging to exported pages.
+  const annotations = allAnnotations.filter((annotation) =>
+    selectedPageIds.has(annotation.pageId),
+  );
+
+  if (options.validateRequired !== false) {
+    this.validateRequiredAnnotations(annotations);
+  }
+
+  // Create a new PDF containing only selected pages.
+  const pdf = await PDFDocument.create();
+
+  pdf.registerFontkit(fontkit);
+
+  const copiedPages = await pdf.copyPages(
+    sourcePdf,
+    selectedPages.map((page) => page.order),
+  );
+
+  copiedPages.forEach((page) => pdf.addPage(page));
+
+  const pdfPages = pdf.getPages();
+
+  const pageMap = new Map(
+    selectedPages.map((metadata, index) => [
+      metadata.id,
+      pdfPages[index],
+    ]),
+  );
+
+  const fontCache = new Map<string, PdfFont>();
+
+  const standardFont = await pdf.embedFont(StandardFonts.Helvetica);
+  const boldFont = await pdf.embedFont(StandardFonts.HelveticaBold);
+
+  for (const annotation of annotations) {
+    const page = pageMap.get(annotation.pageId);
+
+    if (!page) {
+      throw new Error(
+        `Could not resolve the exported page for annotation ${annotation.id}.`,
+      );
     }
 
-    const [annotations, profiles] = await Promise.all([
-      this.annotations.getByDocumentId(documentId),
-      this.handwritingProfiles.getAll(),
-    ]);
-
-    if (options.validateRequired !== false) {
-      this.validateRequiredAnnotations(annotations);
-    }
-
-    const pdf = await PDFDocument.load(
-      await workspace.workingPdf.blob.arrayBuffer(),
+    const font = await this.resolveFont(
+      annotation,
+      profiles,
+      pdf,
+      fontCache,
+      standardFont,
+      boldFont,
     );
 
-    pdf.registerFontkit(fontkit);
-
-    const pdfPages = pdf.getPages();
-
-    if (pdfPages.length !== workspace.pages.length) {
-      throw new Error(
-        "The working PDF page count does not match the document pages.",
-      );
-    }
-
-    const fontCache = new Map<string, PdfFont>();
-
-    const standardFont = await pdf.embedFont(StandardFonts.Helvetica);
-    const boldFont = await pdf.embedFont(StandardFonts.HelveticaBold);
-
-    for (const annotation of annotations) {
-      const pageMetadata = workspace.pages.find(
-        (page) => page.id === annotation.pageId,
-      );
-
-      if (!pageMetadata) {
-        throw new Error(
-          `Could not find the page for annotation ${annotation.id}.`,
-        );
-      }
-
-      const page = pdfPages[pageMetadata.order];
-
-      if (!page) {
-        throw new Error(
-          `Could not resolve PDF page ${pageMetadata.order + 1}.`,
-        );
-      }
-
-      const font = await this.resolveFont(
-        annotation,
-        profiles,
-        pdf,
-        fontCache,
-        standardFont,
-        boldFont,
-      );
-
-      await this.renderAnnotation(page, annotation, font);
-    }
-
-    const bytes = await pdf.save();
-
-    const filename =
-      options.filename ??
-      `${this.sanitizeFilename(workspace.document.name)}.pdf`;
-
-    return {
-      blob: new Blob([Uint8Array.from(bytes)], { type: "application/pdf" }),
-      filename,
-    };
+    await this.renderAnnotation(page, annotation, font);
   }
+
+  const bytes = await pdf.save();
+
+  const filename =
+    options.filename ??
+    `${this.sanitizeFilename(workspace.document.name)}.pdf`;
+
+  return {
+    blob: new Blob([Uint8Array.from(bytes)], {
+      type: "application/pdf",
+    }),
+    filename,
+  };
+}
 
   private validateRequiredAnnotations(annotations: Annotation[]) {
     const missing = annotations.filter((annotation) => {
