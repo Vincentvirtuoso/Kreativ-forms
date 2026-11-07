@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { getDocumentRepositories } from "@/features/documents/document-repository.factory";
 import type {
   Document,
-  PageId
+  PageId,
   DocumentPage,
   StoredDocumentAsset,
 } from "@/features/documents/domain/document.types";
