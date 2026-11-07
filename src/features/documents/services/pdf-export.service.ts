@@ -444,50 +444,66 @@ export class PdfExportService {
     };
   }
 
-  private getPdfRect(
-    page: ReturnType<PDFDocument["getPages"]>[number],
-    position: Annotation["position"],
-  ) {
-    const pdfSize = page.getSize();
-    const rotation = ((page.getRotation().angle % 360) + 360) % 360;
+  
+private getPdfRect(
 
-    const left = position.x / 100;
-    const top = position.y / 100;
-    const right = left + position.width / 100;
-    const bottom = top + position.height / 100;
+private getPdfRect(
+  page: ReturnType<PDFDocument["getPages"]>[number],
+  position: Annotation["position"],
+) {
+  const { width, height } = page.getSize();
 
-    const transform = (x: number, y: number) => {
-      switch (rotation) {
-        case 90:
-          return { x: 1 - y, y: x };
-        case 180:
-          return { x: 1 - x, y };
-        case 270:
-          return { x: y, y: 1 - x };
-        default:
-          return { x, y: 1 - y };
-      }
-    };
+  const rotation =
+    ((page.getRotation().angle % 360) + 360) % 360;
 
-    const corners = [
-      transform(left, top),
-      transform(right, top),
-      transform(left, bottom),
-      transform(right, bottom),
-    ];
+  const x = position.x / 100;
+  const y = position.y / 100;
+  const w = position.width / 100;
+  const h = position.height / 100;
 
-    const minX = Math.min(...corners.map((point) => point.x));
-    const maxX = Math.max(...corners.map((point) => point.x));
-    const minY = Math.min(...corners.map((point) => point.y));
-    const maxY = Math.max(...corners.map((point) => point.y));
+  // Convert top-left normalized coordinates into
+  // bottom-left normalized coordinates.
+  let rect: { x: number; y: number; width: number; height: number };
 
-    return {
-      x: minX * pdfSize.width,
-      y: minY * pdfSize.height,
-      width: (maxX - minX) * pdfSize.width,
-      height: (maxY - minY) * pdfSize.height,
-    };
+  switch (rotation) {
+    case 90:
+      rect = {
+        x: y * width,
+        y: x * height,
+        width: h * width,
+        height: w * height,
+      };
+      break;
+
+    case 180:
+      rect = {
+        x: (1 - x - w) * width,
+        y: y * height,
+        width: w * width,
+        height: h * height,
+      };
+      break;
+
+    case 270:
+      rect = {
+        x: (1 - y - h) * width,
+        y: (1 - x - w) * height,
+        width: h * width,
+        height: w * height,
+      };
+      break;
+
+    default:
+      rect = {
+        x: x * width,
+        y: (1 - y - h) * height,
+        width: w * width,
+        height: h * height,
+      };
   }
+
+  return rect;
+}
 
   private parseColor(value: string) {
     const hex = value.replace("#", "");
