@@ -1,16 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Download, LoaderCircle, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Download, Eye, X } from "lucide-react";
 import { Button } from "@splenddev/kreativ-ui/components";
 
-import { cn } from "@/lib/cn";
-
 import type { DocumentPage } from "@/features/documents/domain/document.types";
+import type { ExportOptions } from "@/features/documents/services/pdf-export.service";
 
 import { PdfDocumentViewer } from "./PdfDocumentViewer";
 import { ExportDialog } from "./ExportDialog";
-import { ExportOptions } from "@/features/documents/services/pdf-export.service";
 
 interface PreviewDialogProps {
   documentId: string;
@@ -21,8 +19,6 @@ interface PreviewDialogProps {
   onClose: () => void;
   onExport: (options: ExportOptions) => Promise<void>;
 }
-
-type ExportMode = "all" | "current" | "selected";
 
 const noop = () => {};
 const noopAsync = async () => {};
@@ -37,10 +33,6 @@ export function PreviewDialog({
   onExport,
 }: PreviewDialogProps) {
   const [pageNumber, setPageNumber] = useState(initialPage);
-  const [isExporting, setIsExporting] = useState(false);
-  const [exportError, setExportError] = useState<string | null>(null);
-  const [exportMode, setExportMode] = useState<ExportMode>("all");
-  const [selectedPageIds, setSelectedPageIds] = useState<string[]>([]);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
 
   const orderedPages = useMemo(
@@ -48,71 +40,95 @@ export function PreviewDialog({
     [pages],
   );
 
+  const pageCount = orderedPages.length;
   const page = orderedPages[pageNumber - 1];
 
+  // Keep preview navigation valid when the document changes.
   useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape" && !isExporting) {
-        onClose();
-      }
+    setPageNumber(Math.min(Math.max(initialPage, 1), Math.max(pageCount, 1)));
+  }, [initialPage, pageCount]);
+
+  // Escape closes preview only when the export dialog is closed.
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape" || exportDialogOpen) return;
+
+      event.preventDefault();
+      onClose();
     }
 
-    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keydown", handleKeyDown);
 
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onClose, isExporting]);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [exportDialogOpen, onClose]);
 
-  function togglePageSelection(pageId: string) {
-    setSelectedPageIds((current) =>
-      current.includes(pageId)
-        ? current.filter((id) => id !== pageId)
-        : [...current, pageId],
+  const handlePageChange = useCallback(
+    (nextPage: number) => {
+      setPageNumber(Math.min(Math.max(nextPage, 1), Math.max(pageCount, 1)));
+    },
+    [pageCount],
+  );
+
+  if (!page) {
+    return (
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Preview of ${documentName}`}
+        className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-background text-text"
+      >
+        <div className="flex size-12 items-center justify-center rounded-lg border border-border bg-surface text-text-muted">
+          <Eye size={20} />
+        </div>
+
+        <h2 className="mt-4 text-sm font-semibold">Nothing to preview</h2>
+
+        <p className="mt-1 text-xs text-text-muted">
+          This document doesn't contain any available pages.
+        </p>
+
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          color="neutral"
+          className="mt-5"
+          onClick={onClose}
+        >
+          Close preview
+        </Button>
+      </section>
     );
   }
 
-  async function handleExport() {
-    if (isExporting || !page) return;
-
-    try {
-      setIsExporting(true);
-      setExportError(null);
-
-      const pageIds =
-        exportMode === "all"
-          ? undefined
-          : exportMode === "current"
-            ? [page.id]
-            : selectedPageIds;
-
-      if (exportMode === "selected" && !selectedPageIds.length) {
-        throw new Error("Select at least one page to export.");
-      }
-
-      await onExport({ pageIds });
-    } catch (error) {
-      setExportError(
-        error instanceof Error ? error.message : "Failed to export PDF.",
-      );
-    } finally {
-      setIsExporting(false);
-    }
-  }
-
-  if (!page) return null;
-
   return (
-    <div
+    <section
       role="dialog"
       aria-modal="true"
       aria-label={`Preview of ${documentName}`}
-      className="absolute inset-0 z-40 flex flex-col bg-background text-text"
+      className="absolute inset-0 z-40 flex min-h-0 flex-col overflow-hidden bg-background text-text"
     >
-      {/* Header */}
-      <div className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border bg-surface px-3 sm:px-4">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium">{documentName}</p>
+      <header className="relative z-10 flex min-h-14 shrink-0 items-center justify-between gap-3 border-b border-border bg-surface px-3 sm:px-5">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="hidden size-9 shrink-0 items-center justify-center rounded-md border border-border bg-background text-text-muted sm:flex">
+            <Eye size={17} />
+          </div>
 
-          <p className="text-xs text-text-muted">Preview · read-only</p>
+          <div className="min-w-0">
+            <h2 className="truncate text-sm font-semibold">{documentName}</h2>
+
+            <div className="mt-0.5 flex items-center gap-1.5 text-xs text-text-muted">
+              <span>Preview</span>
+              <span aria-hidden="true">·</span>
+              <span>Read only</span>
+              <span aria-hidden="true">·</span>
+              <span className="tabular-nums">
+                {pageCount} {pageCount === 1 ? "page" : "pages"}
+              </span>
+            </div>
+          </div>
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
@@ -121,9 +137,12 @@ export function PreviewDialog({
             size="sm"
             onClick={() => setExportDialogOpen(true)}
           >
-            <Download size={16} />
-            <span>Export PDF</span>
+            <Download size={15} />
+            <span className="hidden sm:inline">Export PDF</span>
+            <span className="sm:hidden">Export</span>
           </Button>
+
+          <div className="mx-1 hidden h-6 w-px bg-border sm:block" />
 
           <Button
             type="button"
@@ -131,7 +150,6 @@ export function PreviewDialog({
             iconOnly
             variant="ghost"
             color="neutral"
-            disabled={isExporting}
             onClick={onClose}
             aria-label="Close preview"
             className="shrink-0 text-text-muted hover:text-text"
@@ -139,9 +157,22 @@ export function PreviewDialog({
             <X size={18} />
           </Button>
         </div>
-      </div>
+      </header>
 
-      {/* Export options */}
+      <main className="relative min-h-0 flex-1">
+        <PdfDocumentViewer
+          blob={blob}
+          pageCount={pageCount}
+          pageNumber={pageNumber}
+          onPageChange={handlePageChange}
+          pageId={page.id}
+          documentId={documentId}
+          onAnnotationDelete={noopAsync}
+          onAnnotationUpdate={noop}
+          previewMode
+        />
+      </main>
+
       <ExportDialog
         open={exportDialogOpen}
         documentName={documentName}
@@ -150,20 +181,6 @@ export function PreviewDialog({
         onClose={() => setExportDialogOpen(false)}
         onExport={onExport}
       />
-      {/* PDF viewer */}
-      <div className="min-h-0 flex-1">
-        <PdfDocumentViewer
-          blob={blob}
-          pageCount={orderedPages.length}
-          pageNumber={pageNumber}
-          onPageChange={setPageNumber}
-          pageId={page.id}
-          documentId={documentId}
-          onAnnotationDelete={noopAsync}
-          onAnnotationUpdate={noop}
-          previewMode
-        />
-      </div>
-    </div>
+    </section>
   );
 }

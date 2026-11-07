@@ -16,7 +16,7 @@ export function AnnotationContent({
   const controlClass =
     "h-full w-full min-w-0 border-0 bg-transparent px-1 text-inherit outline-none";
 
-  const textAlign = annotation.style.textAlign ?? "right";
+  const textAlign = annotation.style.textAlign ?? "left";
 
   const textStyle = {
     textAlign,

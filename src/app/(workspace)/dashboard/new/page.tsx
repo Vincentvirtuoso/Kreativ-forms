@@ -66,9 +66,8 @@ export default async function NewDocumentPage({
             </header>
 
             <section className="rounded-2xl border border-border bg-surface p-4 shadow-sm sm:p-6">
-  <ImportFormClient />
-</section>
-
+              <ImportFormClient />
+            </section>
           </div>
 
           <aside

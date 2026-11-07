@@ -523,6 +523,7 @@ export function EditorWorkspace({
       ...size,
       x: (100 - size.width) / 2,
       y: 40,
+      rotation: 0,
     };
 
     try {

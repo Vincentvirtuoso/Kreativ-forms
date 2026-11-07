@@ -12,6 +12,7 @@ export interface AnnotationPosition {
   y: number;
   width: number;
   height: number;
+  rotation:number
 }
 
 export interface AnnotationStyle {

@@ -1,4 +1,11 @@
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import {
+  PDFDocument,
+  StandardFonts,
+  rgb,
+  pushGraphicsState,
+  popGraphicsState,
+  concatTransformationMatrix,
+} from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 
 import type { Annotation } from "@/features/editor/domain/annotation.types";
@@ -9,6 +16,8 @@ import type { AnnotationRepository } from "@/features/editor/repositories/annota
 import type { HandwritingProfileRepository } from "@/features/handwriting/repositories/handwriting-profile.repository";
 import type { HandwritingProfile } from "@/features/handwriting/domain/handwriting-profile.types";
 import { getHandwritingFontFamily } from "@/features/handwriting/services/handwriting-font-loader.service";
+import { DocumentWorkspace } from "./document-workspace.types";
+import { pdfjsLib } from "@/engines/pdf/pdfjs.client";
 
 type PdfFont = Awaited<ReturnType<PDFDocument["embedFont"]>>;
 
@@ -23,6 +32,20 @@ export interface ExportOptions {
 interface ExportResult {
   blob: Blob;
   filename: string;
+}
+
+interface ViewportGeometry {
+  width: number;
+  height: number;
+  transform: number[];
+  rotation: 0 | 90 | 180 | 270;
+}
+
+interface PdfRectangle {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 export class PdfExportService {
@@ -59,7 +82,6 @@ export class PdfExportService {
       );
     }
 
-    // Resolve and validate requested pages.
     const selectedPages = options.pageIds
       ? (() => {
           if (options.pageIds!.length === 0) {
@@ -86,7 +108,6 @@ export class PdfExportService {
         })()
       : [...workspace.pages].sort((a, b) => a.order - b.order);
 
-    // Validate page indexes.
     for (const page of selectedPages) {
       if (
         !Number.isInteger(page.order) ||
@@ -99,7 +120,11 @@ export class PdfExportService {
 
     const selectedPageIds = new Set(selectedPages.map((page) => page.id));
 
-    // Only annotations belonging to exported pages.
+    const viewportGeometries = await this.getViewportGeometries(
+      workspace.workingPdf.blob,
+      selectedPages,
+    );
+
     const annotations = allAnnotations.filter((annotation) =>
       selectedPageIds.has(annotation.pageId),
     );
@@ -108,7 +133,6 @@ export class PdfExportService {
       this.validateRequiredAnnotations(annotations);
     }
 
-    // Create a new PDF containing only selected pages.
     const pdf = await PDFDocument.create();
 
     pdf.registerFontkit(fontkit);
@@ -133,8 +157,9 @@ export class PdfExportService {
 
     for (const annotation of annotations) {
       const page = pageMap.get(annotation.pageId);
+      const viewport = viewportGeometries.get(annotation.pageId);
 
-      if (!page) {
+      if (!page || !viewport) {
         throw new Error(
           `Could not resolve the exported page for annotation ${annotation.id}.`,
         );
@@ -149,7 +174,7 @@ export class PdfExportService {
         boldFont,
       );
 
-      await this.renderAnnotation(page, annotation, font);
+      await this.renderAnnotation(page, annotation, font, viewport);
     }
 
     const bytes = await pdf.save();
@@ -246,6 +271,7 @@ export class PdfExportService {
     page: ReturnType<PDFDocument["getPages"]>[number],
     annotation: Annotation,
     font: PdfFont,
+    viewport: ViewportGeometry,
   ) {
     if (
       (annotation.type === "text" || annotation.type === "date") &&
@@ -258,17 +284,13 @@ export class PdfExportService {
       return;
     }
 
-    const rect = this.getPdfRect(page, annotation.position);
-    const { x, y, width, height } = rect;
+    const rect = this.getPdfRect(annotation.position, viewport);
     const style = annotation.style;
     const opacity = style.opacity ?? 1;
 
     if (style.backgroundColor) {
       page.drawRectangle({
-        x,
-        y,
-        width,
-        height,
+        ...rect,
         color: this.parseColor(style.backgroundColor),
         opacity,
       });
@@ -276,52 +298,126 @@ export class PdfExportService {
 
     if (style.borderColor && (style.borderWidth ?? 0) > 0) {
       page.drawRectangle({
-        x,
-        y,
-        width,
-        height,
+        ...rect,
         borderColor: this.parseColor(style.borderColor),
         borderWidth: style.borderWidth,
         opacity,
       });
     }
 
-    switch (annotation.type) {
-      case "text":
-      case "date": {
-        this.drawText(page, annotation.value, rect, font, style, opacity);
-        break;
-      }
+    const [a, b, c, d, e, f] = viewport.transform;
 
-      case "checkbox": {
-        if (annotation.checked) {
-          const inset = Math.min(width, height) * 0.2;
+    const determinant = a * d - b * c;
 
-          page.drawLine({
-            start: { x: x + inset, y: y + height * 0.48 },
-            end: { x: x + width * 0.43, y: y + inset },
-            thickness: Math.max(1, width * 0.07),
-            color: this.parseColor(style.color ?? "#111827"),
+    if (Math.abs(determinant) < Number.EPSILON) {
+      throw new Error("Invalid PDF viewport transformation.");
+    }
+
+    const x = (annotation.position.x / 100) * viewport.width;
+    const y = (annotation.position.y / 100) * viewport.height;
+    const width = (annotation.position.width / 100) * viewport.width;
+    const height = (annotation.position.height / 100) * viewport.height;
+
+    const inverse = (px: number, py: number) => {
+      const tx = px - e;
+      const ty = py - f;
+
+      return {
+        x: (d * tx - c * ty) / determinant,
+        y: (-b * tx + a * ty) / determinant,
+      };
+    };
+
+    const bottomLeft = inverse(x, y + height);
+    const bottomRight = inverse(x + width, y + height);
+    const topLeft = inverse(x, y);
+
+    const matrixA = (bottomRight.x - bottomLeft.x) / width;
+    const matrixB = (bottomRight.y - bottomLeft.y) / width;
+    const matrixC = (topLeft.x - bottomLeft.x) / height;
+    const matrixD = (topLeft.y - bottomLeft.y) / height;
+
+    page.pushOperators(
+      pushGraphicsState(),
+      concatTransformationMatrix(
+        matrixA,
+        matrixB,
+        matrixC,
+        matrixD,
+        bottomLeft.x,
+        bottomLeft.y,
+      ),
+    );
+
+    try {
+      const viewportRect = {
+        x: 0,
+        y: 0,
+        width,
+        height,
+      };
+
+      switch (annotation.type) {
+        case "text":
+        case "date": {
+          this.drawText(
+            page,
+            annotation.value,
+            viewportRect,
+            font,
+            style,
             opacity,
-          });
+          );
+          break;
+        }
 
-          page.drawLine({
-            start: { x: x + width * 0.43, y: y + inset },
-            end: { x: x + width - inset, y: y + height - inset },
-            thickness: Math.max(1, width * 0.07),
-            color: this.parseColor(style.color ?? "#111827"),
+        case "checkbox": {
+          if (annotation.checked) {
+            const inset = Math.min(width, height) * 0.2;
+
+            page.drawLine({
+              start: {
+                x: inset,
+                y: height * 0.48,
+              },
+              end: {
+                x: width * 0.43,
+                y: inset,
+              },
+              thickness: Math.max(1, width * 0.07),
+              color: this.parseColor(style.color ?? "#111827"),
+              opacity,
+            });
+
+            page.drawLine({
+              start: {
+                x: width * 0.43,
+                y: inset,
+              },
+              end: {
+                x: width - inset,
+                y: height - inset,
+              },
+              thickness: Math.max(1, width * 0.07),
+              color: this.parseColor(style.color ?? "#111827"),
+              opacity,
+            });
+          }
+          break;
+        }
+
+        case "signature": {
+          await this.drawSignature(
+            page,
+            annotation.value ?? "",
+            viewportRect,
             opacity,
-          });
+          );
+          break;
         }
-        break;
       }
-
-      case "signature": {
-        if (annotation.value) {
-          await this.drawSignature(page, annotation.value, rect, opacity);
-        }
-        break;
-      }
+    } finally {
+      page.pushOperators(popGraphicsState());
     }
   }
 
@@ -444,66 +540,94 @@ export class PdfExportService {
     };
   }
 
-  
-private getPdfRect(
+  private getPdfRect(
+    position: Annotation["position"],
+    viewport: ViewportGeometry,
+  ): PdfRectangle {
+    const [a, b, c, d, e, f] = viewport.transform;
 
-private getPdfRect(
-  page: ReturnType<PDFDocument["getPages"]>[number],
-  position: Annotation["position"],
-) {
-  const { width, height } = page.getSize();
+    const determinant = a * d - b * c;
 
-  const rotation =
-    ((page.getRotation().angle % 360) + 360) % 360;
+    if (Math.abs(determinant) < Number.EPSILON) {
+      throw new Error("Invalid PDF viewport transformation.");
+    }
 
-  const x = position.x / 100;
-  const y = position.y / 100;
-  const w = position.width / 100;
-  const h = position.height / 100;
+    const x = (position.x / 100) * viewport.width;
+    const y = (position.y / 100) * viewport.height;
+    const width = (position.width / 100) * viewport.width;
+    const height = (position.height / 100) * viewport.height;
 
-  // Convert top-left normalized coordinates into
-  // bottom-left normalized coordinates.
-  let rect: { x: number; y: number; width: number; height: number };
+    const inverseTransform = (px: number, py: number) => {
+      const tx = px - e;
+      const ty = py - f;
 
-  switch (rotation) {
-    case 90:
-      rect = {
-        x: y * width,
-        y: x * height,
-        width: h * width,
-        height: w * height,
+      return {
+        x: (d * tx - c * ty) / determinant,
+        y: (-b * tx + a * ty) / determinant,
       };
-      break;
+    };
 
-    case 180:
-      rect = {
-        x: (1 - x - w) * width,
-        y: y * height,
-        width: w * width,
-        height: h * height,
-      };
-      break;
+    const corners = [
+      inverseTransform(x, y),
+      inverseTransform(x + width, y),
+      inverseTransform(x, y + height),
+      inverseTransform(x + width, y + height),
+    ];
 
-    case 270:
-      rect = {
-        x: (1 - y - h) * width,
-        y: (1 - x - w) * height,
-        width: h * width,
-        height: w * height,
-      };
-      break;
+    const xs = corners.map((point) => point.x);
+    const ys = corners.map((point) => point.y);
 
-    default:
-      rect = {
-        x: x * width,
-        y: (1 - y - h) * height,
-        width: w * width,
-        height: h * height,
-      };
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+
+    return {
+      x: minX,
+      y: minY,
+      width: maxX - minX,
+      height: maxY - minY,
+    };
   }
 
-  return rect;
-}
+  private async getViewportGeometries(
+    blob: Blob,
+    pages: DocumentWorkspace["pages"],
+  ): Promise<Map<PageId, ViewportGeometry>> {
+    const loadingTask = pdfjsLib.getDocument({
+      data: new Uint8Array(await blob.arrayBuffer()),
+    });
+
+    try {
+      const document = await loadingTask.promise;
+      const geometries = new Map<PageId, ViewportGeometry>();
+
+      for (const metadata of pages) {
+        const page = await document.getPage(metadata.order + 1);
+
+        try {
+          const viewport = page.getViewport({ scale: 1 });
+
+          geometries.set(metadata.id, {
+            width: viewport.width,
+            height: viewport.height,
+            transform: [...viewport.transform],
+            rotation: (((viewport.rotation % 360) + 360) % 360) as
+              | 0
+              | 90
+              | 180
+              | 270,
+          });
+        } finally {
+          page.cleanup();
+        }
+      }
+
+      return geometries;
+    } finally {
+      await loadingTask.destroy();
+    }
+  }
 
   private parseColor(value: string) {
     const hex = value.replace("#", "");

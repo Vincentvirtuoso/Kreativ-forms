@@ -300,40 +300,6 @@ export function DocumentsWorkspace() {
         </button>
       </div>
 
-      {/* Overview */}
-      {view === "documents" && !loading && !error && hasDocuments && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <div className="rounded-xl border border-border bg-surface p-4">
-            <div className="flex items-center gap-2 text-xs text-text-muted">
-              <FileText size={15} />
-              Total documents
-            </div>
-            <p className="mt-3 text-2xl font-semibold tabular-nums text-text">
-              {counts.all}
-            </p>
-          </div>
-
-          <div className="rounded-xl border border-border bg-surface p-4">
-            <div className="flex items-center gap-2 text-xs text-text-muted">
-              <Clock3 size={15} />
-              In progress
-            </div>
-            <p className="mt-3 text-2xl font-semibold tabular-nums text-text">
-              {counts.in_progress}
-            </p>
-          </div>
-
-          <div className="col-span-2 rounded-xl border border-border bg-surface p-4 sm:col-span-1">
-            <div className="flex items-center gap-2 text-xs text-text-muted">
-              <CheckCircle2 size={15} />
-              Completed
-            </div>
-            <p className="mt-3 text-2xl font-semibold tabular-nums text-text">
-              {counts.completed}
-            </p>
-          </div>
-        </div>
-      )}
 
       {/* Toolbar */}
       {(view === "documents" ? hasDocuments : hasTrash) &&

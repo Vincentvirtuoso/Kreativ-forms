@@ -51,26 +51,31 @@ export function AssetsView() {
     void loadSignatures();
   }, [loadSignatures]);
 
-const handleSaveSignature = async (drawing: { png: string; svg?: string }) => {
-  const name = signatureName.trim();
+  const handleSaveSignature = async (drawing: {
+    png: string;
+    svg?: string;
+  }) => {
+    const name = signatureName.trim();
 
-  if (!name) {
-    setError("Give your signature a name before saving.");
-    return;
-  }
+    if (!name) {
+      setError("Give your signature a name before saving.");
+      return;
+    }
 
-  try {
-    setError(null);
+    try {
+      setError(null);
 
-    await signatureService.createFromDrawing(name, drawing);
+      await signatureService.createFromDrawing(name, drawing);
 
-    setSignatureName("");
-    setIsCreating(false);
-    await loadSignatures();
-  } catch (err) {
-    setError(err instanceof Error ? err.message : "Unable to save signature.");
-  }
-};
+      setSignatureName("");
+      setIsCreating(false);
+      await loadSignatures();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Unable to save signature.",
+      );
+    }
+  };
 
   const handleDeleteSignature = async (id: string) => {
     const confirmed = window.confirm(
@@ -91,30 +96,28 @@ const handleSaveSignature = async (drawing: { png: string; svg?: string }) => {
     }
   };
 
-   async function handleRenameSignature(id: string, name: string) {
-     const trimmedName = name.trim();
+  async function handleRenameSignature(id: string, name: string) {
+    const trimmedName = name.trim();
 
-     if (!trimmedName) {
-       setError("Signature name cannot be empty.");
-       return;
-     }
+    if (!trimmedName) {
+      setError("Signature name cannot be empty.");
+      return;
+    }
 
-     try {
-       await signatureService.update(id, { name: trimmedName });
+    try {
+      await signatureService.update(id, { name: trimmedName });
 
-       setSignatures((current) =>
-         current.map((signature) =>
-           signature.id === id
-             ? { ...signature, name: trimmedName }
-             : signature,
-         ),
-       );
+      setSignatures((current) =>
+        current.map((signature) =>
+          signature.id === id ? { ...signature, name: trimmedName } : signature,
+        ),
+      );
 
-       setError(null);
-     } catch {
-       setError("Unable to rename this signature.");
-     }
-   }
+      setError(null);
+    } catch {
+      setError("Unable to rename this signature.");
+    }
+  }
 
   const openHandwritingProfile = (id: string) => {
     router.push(`/handwriting/${id}`);
@@ -185,13 +188,12 @@ const handleSaveSignature = async (drawing: { png: string; svg?: string }) => {
               </p>
             </div>
 
-            <button
+            <Button
               type="button"
               onClick={() => {
                 setIsCreating((value) => !value);
                 setError(null);
               }}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-brand px-4 text-sm font-medium text-white hover:opacity-90"
             >
               {isCreating ? (
                 <X className="size-4" />
@@ -199,7 +201,7 @@ const handleSaveSignature = async (drawing: { png: string; svg?: string }) => {
                 <Plus className="size-4" />
               )}
               {isCreating ? "Cancel" : "Add signature"}
-            </button>
+            </Button>
           </div>
 
           {isCreating && (
@@ -314,18 +316,15 @@ function AssetTab({ active, icon, label, count, onClick }: AssetTabProps) {
 
 interface SignatureAssetCardProps {
   signature: SignatureAsset;
-  onDelete: () => void;
+  onDelete: (id: string) => void;
+  onRename: (id: string, name: string) => Promise<void>;
 }
 
 function SignatureAssetCard({
   signature,
   onDelete,
   onRename,
-}: {
-  signature: SignatureAsset;
-  onDelete: (id: string) => void;
-  onRename: (id: string, name: string) => Promise<void>;
-}) {
+}: SignatureAssetCardProps) {
   const [preview, setPreview] = useState<string | null>(null);
   const [editingName, setEditingName] = useState(false);
   const [name, setName] = useState(signature.name);

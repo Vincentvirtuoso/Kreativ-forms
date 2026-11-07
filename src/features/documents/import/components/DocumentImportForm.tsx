@@ -534,6 +534,7 @@ export function DocumentImportForm() {
             <Button
               type="button"
               color="neutral"
+              className="whitespace-nowrap"
               disabled={isSaving}
               onClick={handleSave}
             >

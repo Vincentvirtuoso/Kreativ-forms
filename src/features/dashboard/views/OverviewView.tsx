@@ -341,14 +341,6 @@ export function OverviewView() {
             all in one place.
           </p>
         </div>
-
-        <Link
-          href="/dashboard/new"
-          className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg bg-brand px-4 text-sm font-medium text-brand-fg transition-colors hover:bg-brand-hover"
-        >
-          <Plus size={16} />
-          New document
-        </Link>
       </header>
 
       {/* Quick actions */}

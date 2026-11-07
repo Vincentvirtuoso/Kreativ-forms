@@ -133,8 +133,6 @@ export function AnnotationBox({
           color: annotation.style.color ?? "#111827",
           textAlign: annotation.style.textAlign ?? "left",
 
-          // The faint blue tint is an editing aid. In the preview, only a
-          // background the user explicitly set is drawn.
           backgroundColor: isCheckbox
             ? "transparent"
             : (annotation.style.backgroundColor ??
