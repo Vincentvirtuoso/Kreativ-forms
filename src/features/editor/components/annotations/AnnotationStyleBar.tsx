@@ -1,6 +1,13 @@
 "use client";
 
-import { AlignCenter, AlignLeft, AlignRight, Minus, Plus } from "lucide-react";
+import {
+  AlignCenter,
+  AlignJustify,
+  AlignLeft,
+  AlignRight,
+  Minus,
+  Plus,
+} from "lucide-react";
 
 import type { Annotation } from "../../domain/annotation.types";
 import { FONT_FAMILY_OPTIONS } from "../../utils/font-family-constants";
@@ -95,6 +102,7 @@ export function AnnotationStyleBar({
                   ["left", AlignLeft],
                   ["center", AlignCenter],
                   ["right", AlignRight],
+                  ["justify", AlignJustify],
                 ] as const
               ).map(([value, Icon]) => (
                 <IconButton

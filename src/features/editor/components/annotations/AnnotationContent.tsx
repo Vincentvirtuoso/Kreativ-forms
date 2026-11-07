@@ -14,7 +14,13 @@ export function AnnotationContent({
   onRequestSign: () => void;
 }) {
   const controlClass =
-    "h-full w-full min-w-0 border-0 bg-red px-1 text-inherit outline-none";
+    "h-full w-full min-w-0 border-0 bg-transparent px-1 text-inherit outline-none";
+
+  const textAlign = annotation.style.textAlign ?? "right";
+
+  const textStyle = {
+    textAlign,
+  } satisfies React.CSSProperties;
 
   switch (annotation.type) {
     case "text":
@@ -25,6 +31,7 @@ export function AnnotationContent({
           disabled={disabled}
           onPointerDown={(event) => event.stopPropagation()}
           onChange={(event) => onChange(event.target.value)}
+          style={textStyle}
           className={`${controlClass} resize-none`}
         />
       ) : (
@@ -35,6 +42,7 @@ export function AnnotationContent({
           disabled={disabled}
           onPointerDown={(event) => event.stopPropagation()}
           onChange={(event) => onChange(event.target.value)}
+          style={textStyle}
           className={controlClass}
         />
       );
@@ -47,6 +55,7 @@ export function AnnotationContent({
           disabled={disabled}
           onPointerDown={(event) => event.stopPropagation()}
           onChange={(event) => onChange(event.target.value)}
+          style={textStyle}
           className={controlClass}
         />
       );

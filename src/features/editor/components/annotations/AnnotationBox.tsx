@@ -140,20 +140,19 @@ export function AnnotationBox({
             : (annotation.style.backgroundColor ??
               (preview ? "transparent" : EDITOR_BACKGROUND)),
 
-          // Border only exists when the user gave it a width. Color alone
-          // never draws one, and nothing is drawn by default.
           borderColor: annotation.style.borderColor ?? "transparent",
           borderWidth: annotation.style.borderWidth ?? 0,
           borderStyle: annotation.style.borderStyle ?? "solid",
           borderRadius: annotation.style.borderRadius ?? 0,
           opacity: annotation.style.opacity ?? 1,
         }}
-        className="absolute inset-0 flex items-center overflow-hidden"
+        className="absolute inset-0 flex w-full items-center overflow-hidden"
       >
         <div
-          className={`flex h-full w-full items-center ${
-            editable ? "" : "pointer-events-none"
-          }`}
+          className={cn(
+            "flex h-full w-full items-center",
+            editable ? "" : "pointer-events-none",
+          )}
         >
           <AnnotationContent
             annotation={annotation}

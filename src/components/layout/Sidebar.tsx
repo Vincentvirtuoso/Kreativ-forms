@@ -115,9 +115,6 @@ const SidebarContent = ({
   onClose,
 }: SidebarContentProps) => {
   const isActive = (href: string) => {
-    console.log(href);
-    console.log(pathname);
-
     if (pathname === href) return true;
 
     if (href === "/dashboard") return false;

@@ -27,7 +27,7 @@ export interface AnnotationStyle {
   borderRadius?: number;
 
   opacity?: number;
-  textAlign?: "left" | "center" | "right";
+  textAlign?: "left" | "center" | "right" | "justify";
 }
 
 export interface BaseAnnotation {
