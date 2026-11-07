@@ -30,7 +30,7 @@ const EDGE_HANDLES: Record<"n" | "s" | "e" | "w", string> = {
   e: "right-0 top-1/2 translate-x-1/2 -translate-y-1/2 cursor-ew-resize",
 };
 const EDGE_HANDLES_SIZES: Record<"n" | "s" | "e" | "w", string> = {
-  n: "l h-2 w-7",
+  n: "h-2 w-7",
   s: "h-2 w-7",
   w: "h-7 w-2",
   e: "h-7 w-2",
@@ -131,7 +131,7 @@ export function AnnotationBox({
           fontFamily: annotation.style.fontFamily ?? "inherit",
           fontWeight: annotation.style.fontWeight ?? "normal",
           color: annotation.style.color ?? "#111827",
-          textAlign: annotation.style.textAlign ?? "right",
+          textAlign: annotation.style.textAlign ?? "left",
 
           // The faint blue tint is an editing aid. In the preview, only a
           // background the user explicitly set is drawn.
