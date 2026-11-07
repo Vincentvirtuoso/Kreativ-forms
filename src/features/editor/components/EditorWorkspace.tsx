@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { getDocumentRepositories } from "@/features/documents/document-repository.factory";
 import type {
   Document,
+  PageId
   DocumentPage,
   StoredDocumentAsset,
 } from "@/features/documents/domain/document.types";
@@ -303,33 +304,37 @@ export function EditorWorkspace({
     handleAnnotationUpdate(update);
   }
 
-  async function handleExport(): Promise<void> {
-    if (annotationsLoading || exporting) {
-      throw new Error("Please wait until annotations are ready.");
-    }
+  async function handleExport(pageIds?: PageId[]): Promise<void> {
+  if (annotationsLoading || exporting) {
+    throw new Error("Please wait until annotations are ready.");
+  }
 
-    setExporting(true);
-    setAnnotationError(null);
+  setExporting(true);
+  setAnnotationError(null);
 
-    try {
-      await autosave.flushAll();
+  try {
+    await autosave.flushAll();
 
-      const result = await pdfExportService.export(document.id);
+    const result = await pdfExportService.export(document.id, {
+      pageIds,
+    });
 
-      downloadPdf(result.blob, result.filename);
+    downloadPdf(result.blob, result.filename);
 
+    // Only mark the document completed when exporting the entire document.
+    if (!pageIds) {
       await repositories.documents.update(document.id, {
         status: "completed",
         completedAt: new Date().toISOString(),
       });
-    } catch (error) {
-      console.error("PDF export failed:", error);
-
-      throw error;
-    } finally {
-      setExporting(false);
     }
+  } catch (error) {
+    console.error("PDF export failed:", error);
+    throw error;
+  } finally {
+    setExporting(false);
   }
+}
 
   useEffect(() => {
     let active = true;
