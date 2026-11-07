@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { Download, LoaderCircle, X } from "lucide-react";
 import { Button } from "@splenddev/kreativ-ui/components";
 
+import { cn } from "@/lib/cn";
+
 import type { DocumentPage } from "@/features/documents/domain/document.types";
 
 import { PdfDocumentViewer } from "./PdfDocumentViewer";
