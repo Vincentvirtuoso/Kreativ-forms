@@ -11,6 +11,7 @@ import {
 
 import type { Annotation } from "../../domain/annotation.types";
 import { FONT_FAMILY_OPTIONS } from "../../utils/font-family-constants";
+import { Button } from "@splenddev/kreativ-ui/components";
 
 type Style = Annotation["style"];
 
@@ -198,18 +199,19 @@ function IconButton({
   children: React.ReactNode;
 }) {
   return (
-    <button
+    <Button
       type="button"
       aria-label={label}
       aria-pressed={active}
       disabled={disabled}
       onClick={onClick}
-      className={`flex h-8 min-w-8 items-center justify-center rounded-md px-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:opacity-30 pointer-coarse:h-10 pointer-coarse:min-w-10 ${
-        active ? "bg-brand text-white" : "text-text hover:bg-black/5"
-      }`}
+      size="sm"
+      variant={active ? "solid" : "soft"}
+      className="rounded-lg"
+      iconOnly
     >
       {children}
-    </button>
+    </Button>
   );
 }
 

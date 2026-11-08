@@ -8,7 +8,4 @@ export const kreativFormsTheme = extendTheme({
   tokens,
   semanticTokens,
   typography,
-  recipes: {},
-  intensity: 50,
-  sizes: {},
 });

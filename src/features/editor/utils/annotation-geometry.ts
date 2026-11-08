@@ -21,6 +21,7 @@ type ResizeOptions = {
  * Resizes from any of the 8 handles. Everything is in percent of the page.
  * The edge opposite the handle stays fixed and the box never leaves the page.
  */
+
 export function resizeFromHandle(
   initial: AnnotationPosition,
   handle: ResizeHandle,
@@ -35,6 +36,7 @@ export function resizeFromHandle(
   const north = handle.includes("n");
   const south = handle.includes("s");
 
+  // Proportional resizing is only supported by corner handles.
   if (keepAspect && handle.length === 2) {
     const anchorX = west ? x + width : x;
     const anchorY = north ? y + height : y;
@@ -42,19 +44,22 @@ export function resizeFromHandle(
     const availableWidth = west ? anchorX : 100 - anchorX;
     const availableHeight = north ? anchorY : 100 - anchorY;
 
-    const rawWidth = west ? width - deltaX : width + deltaX;
-    const rawHeight = north ? height - deltaY : height + deltaY;
-
     const maxScale = Math.min(availableWidth / width, availableHeight / height);
-    const minScale = Math.min(
-      Math.max(minWidth / width, minHeight / height),
-      maxScale,
-    );
-    const scale = clamp(
-      Math.max(rawWidth / width, rawHeight / height),
-      minScale,
-      maxScale,
-    );
+
+    const minScale = Math.max(minWidth / width, minHeight / height);
+
+    // A valid initial position should make this impossible.
+    // Still, fail safely if the supplied geometry is invalid.
+    if (maxScale < minScale) return initial;
+
+    const widthChange = east ? deltaX : west ? -deltaX : 0;
+
+    const heightChange = south ? deltaY : north ? -deltaY : 0;
+
+    // Average fractional changes to preserve the original aspect ratio.
+    const scaleDelta = (widthChange / width + heightChange / height) / 2;
+
+    const scale = clamp(1 + scaleDelta, minScale, maxScale);
 
     const nextWidth = width * scale;
     const nextHeight = height * scale;
@@ -64,6 +69,7 @@ export function resizeFromHandle(
       y: north ? anchorY - nextHeight : anchorY,
       width: nextWidth,
       height: nextHeight,
+      rotation: initial.rotation,
     };
   }
 
@@ -72,12 +78,29 @@ export function resizeFromHandle(
   let right = x + width;
   let bottom = y + height;
 
-  if (west) left = clamp(x + deltaX, 0, right - minWidth);
-  if (east) right = clamp(right + deltaX, left + minWidth, 100);
-  if (north) top = clamp(y + deltaY, 0, bottom - minHeight);
-  if (south) bottom = clamp(bottom + deltaY, top + minHeight, 100);
+  if (west) {
+    left = clamp(x + deltaX, 0, right - minWidth);
+  }
 
-  return { x: left, y: top, width: right - left, height: bottom - top };
+  if (east) {
+    right = clamp(right + deltaX, left + minWidth, 100);
+  }
+
+  if (north) {
+    top = clamp(y + deltaY, 0, bottom - minHeight);
+  }
+
+  if (south) {
+    bottom = clamp(bottom + deltaY, top + minHeight, 100);
+  }
+
+  return {
+    x: left,
+    y: top,
+    width: right - left,
+    height: bottom - top,
+    rotation: initial.rotation,
+  };
 }
 
 /**

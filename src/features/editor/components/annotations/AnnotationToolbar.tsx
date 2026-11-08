@@ -70,7 +70,7 @@ export function AnnotationToolbar({
         <div
           id="annotation-style-panel"
           className="
-            pointer-events-auto w-fit max-w-[calc(100vw-1.5rem)]
+            pointer-events-auto w-fit md:max-w-160 max-w-[calc(100vw-1.5rem)]
             overflow-x-auto
             rounded-xl border border-border
             bg-background/95 shadow-2xl backdrop-blur-xl

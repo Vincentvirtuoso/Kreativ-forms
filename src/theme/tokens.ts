@@ -15,9 +15,6 @@ export const tokens = {
       900: defineToken("#171717"),
       950: defineToken("#0A0A0A"),
     },
-    violet: {
-      50: { value: "#fff" },
-    },
   },
 
   fonts: {

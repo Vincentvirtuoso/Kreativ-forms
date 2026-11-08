@@ -14,7 +14,6 @@ import type {
 import type { PreparedDocumentDraft } from "../domain/prepared-document.types";
 import { ThumbnailService } from "./thumbnail.service";
 
-
 import { FileValidationService } from "./file-validation.service";
 import { PdfInspectionService } from "./pdf-inspection.service";
 import { ImageConversionService } from "./image-conversion.service";
@@ -22,7 +21,6 @@ import { ImageConversionService } from "./image-conversion.service";
 import { throwIfImportAborted } from "../domain/import.rules";
 import type { ValidatedImportFile } from "../domain/import.types";
 import { pdfjsLib } from "@/engines/pdf/pdfjs.client";
-
 
 const THUMBNAIL_WIDTH = 320;
 const THUMBNAIL_QUALITY = 0.8;
@@ -67,7 +65,7 @@ export class DocumentPreparationService {
 
       const nextRotation = ((page.rotation + rotation) % 360) as PageRotation;
 
-      const swapsDimensions = rotation === 90 || rotation === 270;
+      const swapsDimensions = page.rotation % 180 !== nextRotation % 180;
 
       return {
         ...page,
@@ -344,6 +342,7 @@ export class DocumentPreparationService {
     const appendedMetadata: Array<{
       width: number;
       height: number;
+      viewBox: DocumentPage["viewBox"];
     }> = [];
 
     const addedImageAssets: StoredDocumentAsset[] = [];
@@ -409,6 +408,7 @@ export class DocumentPreparationService {
         appendedMetadata.push({
           width: inspection.pages[index].width,
           height: inspection.pages[index].height,
+          viewBox: inspection.pages[index].viewBox,
         });
       });
     }
@@ -442,6 +442,7 @@ export class DocumentPreparationService {
         rotation: 0,
         width: metadata.width,
         height: metadata.height,
+        viewBox: metadata.viewBox,
       }),
     );
 

@@ -41,13 +41,6 @@ interface ViewportGeometry {
   rotation: 0 | 90 | 180 | 270;
 }
 
-interface PdfRectangle {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
 export class PdfExportService {
   constructor(
     private readonly documents: DocumentLoaderService,
@@ -284,39 +277,20 @@ export class PdfExportService {
       return;
     }
 
-    const rect = this.getPdfRect(annotation.position, viewport);
     const style = annotation.style;
     const opacity = style.opacity ?? 1;
-
-    if (style.backgroundColor) {
-      page.drawRectangle({
-        ...rect,
-        color: this.parseColor(style.backgroundColor),
-        opacity,
-      });
-    }
-
-    if (style.borderColor && (style.borderWidth ?? 0) > 0) {
-      page.drawRectangle({
-        ...rect,
-        borderColor: this.parseColor(style.borderColor),
-        borderWidth: style.borderWidth,
-        opacity,
-      });
-    }
-
-    const [a, b, c, d, e, f] = viewport.transform;
-
-    const determinant = a * d - b * c;
-
-    if (Math.abs(determinant) < Number.EPSILON) {
-      throw new Error("Invalid PDF viewport transformation.");
-    }
 
     const x = (annotation.position.x / 100) * viewport.width;
     const y = (annotation.position.y / 100) * viewport.height;
     const width = (annotation.position.width / 100) * viewport.width;
     const height = (annotation.position.height / 100) * viewport.height;
+
+    const [a, b, c, d, e, f] = viewport.transform;
+    const determinant = a * d - b * c;
+
+    if (Math.abs(determinant) < Number.EPSILON) {
+      throw new Error("Invalid PDF viewport transformation.");
+    }
 
     const inverse = (px: number, py: number) => {
       const tx = px - e;
@@ -328,9 +302,31 @@ export class PdfExportService {
       };
     };
 
-    const bottomLeft = inverse(x, y + height);
-    const bottomRight = inverse(x + width, y + height);
-    const topLeft = inverse(x, y);
+    const angle = (annotation.position.rotation * Math.PI) / 180;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+
+    const centerX = x + width / 2;
+    const centerY = y + height / 2;
+
+    const rotatePoint = (px: number, py: number) => {
+      const dx = px - centerX;
+      const dy = py - centerY;
+
+      return {
+        x: centerX + cos * dx - sin * dy,
+        y: centerY + sin * dx + cos * dy,
+      };
+    };
+
+    const inverseRotated = (px: number, py: number) => {
+      const point = rotatePoint(px, py);
+      return inverse(point.x, point.y);
+    };
+
+    const bottomLeft = inverseRotated(x, y + height);
+    const bottomRight = inverseRotated(x + width, y + height);
+    const topLeft = inverseRotated(x, y);
 
     const matrixA = (bottomRight.x - bottomLeft.x) / width;
     const matrixB = (bottomRight.y - bottomLeft.y) / width;
@@ -356,6 +352,23 @@ export class PdfExportService {
         width,
         height,
       };
+
+      if (style.backgroundColor) {
+        page.drawRectangle({
+          ...viewportRect,
+          color: this.parseColor(style.backgroundColor),
+          opacity,
+        });
+      }
+
+      if (style.borderColor && (style.borderWidth ?? 0) > 0) {
+        page.drawRectangle({
+          ...viewportRect,
+          borderColor: this.parseColor(style.borderColor),
+          borderWidth: style.borderWidth,
+          opacity,
+        });
+      }
 
       switch (annotation.type) {
         case "text":
@@ -537,56 +550,6 @@ export class PdfExportService {
     return {
       bytes,
       mimeType: match[1].toLowerCase(),
-    };
-  }
-
-  private getPdfRect(
-    position: Annotation["position"],
-    viewport: ViewportGeometry,
-  ): PdfRectangle {
-    const [a, b, c, d, e, f] = viewport.transform;
-
-    const determinant = a * d - b * c;
-
-    if (Math.abs(determinant) < Number.EPSILON) {
-      throw new Error("Invalid PDF viewport transformation.");
-    }
-
-    const x = (position.x / 100) * viewport.width;
-    const y = (position.y / 100) * viewport.height;
-    const width = (position.width / 100) * viewport.width;
-    const height = (position.height / 100) * viewport.height;
-
-    const inverseTransform = (px: number, py: number) => {
-      const tx = px - e;
-      const ty = py - f;
-
-      return {
-        x: (d * tx - c * ty) / determinant,
-        y: (-b * tx + a * ty) / determinant,
-      };
-    };
-
-    const corners = [
-      inverseTransform(x, y),
-      inverseTransform(x + width, y),
-      inverseTransform(x, y + height),
-      inverseTransform(x + width, y + height),
-    ];
-
-    const xs = corners.map((point) => point.x);
-    const ys = corners.map((point) => point.y);
-
-    const minX = Math.min(...xs);
-    const maxX = Math.max(...xs);
-    const minY = Math.min(...ys);
-    const maxY = Math.max(...ys);
-
-    return {
-      x: minX,
-      y: minY,
-      width: maxX - minX,
-      height: maxY - minY,
     };
   }
 

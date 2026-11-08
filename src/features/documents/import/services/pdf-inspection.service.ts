@@ -1,4 +1,3 @@
-
 import { pdfjsLib } from "@/engines/pdf/pdfjs.client";
 import { DocumentImportError } from "../domain/import.errors";
 
@@ -63,39 +62,35 @@ export class PdfInspectionService {
 
       const pages: ImportPageMetadata[] = [];
 
-for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
-  throwIfImportAborted(signal);
+      for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+        throwIfImportAborted(signal);
 
-  const page = await pdf.getPage(pageNumber);
+        const page = await pdf.getPage(pageNumber);
 
-  try {
-    const viewport = page.getViewport({ scale: 1 });
+        try {
+          const viewport = page.getViewport({ scale: 1 });
 
-    const [x1, y1, x2, y2] = page.view;
+          const [x1, y1, x2, y2] = page.view;
 
-    pages.push({
-      sourcePageNumber: pageNumber,
+          pages.push({
+            sourcePageNumber: pageNumber,
 
-      width: viewport.width,
-      height: viewport.height,
+            width: viewport.width,
+            height: viewport.height,
 
-      rotation: ((page.rotate % 360 + 360) % 360) as
-        | 0
-        | 90
-        | 180
-        | 270,
+            rotation: (((page.rotate % 360) + 360) % 360) as 0 | 90 | 180 | 270,
 
-      viewBox: {
-        x: x1,
-        y: y1,
-        width: x2 - x1,
-        height: y2 - y1,
-      },
-    });
-  } finally {
-    page.cleanup();
-  }
-}
+            viewBox: {
+              x: x1,
+              y: y1,
+              width: x2 - x1,
+              height: y2 - y1,
+            },
+          });
+        } finally {
+          page.cleanup();
+        }
+      }
 
       return {
         pageCount: pdf.numPages,

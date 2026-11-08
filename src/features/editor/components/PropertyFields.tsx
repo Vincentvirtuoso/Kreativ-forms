@@ -19,6 +19,7 @@ export function PropertyInput({
   type = "text",
   min,
   max,
+  showAlpha = true,
 }: {
   label: string;
   value: string;
@@ -26,16 +27,18 @@ export function PropertyInput({
   type?: string;
   min?: number;
   max?: number;
+  showAlpha?: boolean;
 }) {
   return (
     <FormField>
       <FormField.Label className="text-xs">{label}</FormField.Label>
+
       <FormField.Control>
         {type === "color" ? (
           <ColorPicker
             value={value}
-            onChange={(color) => onChange(color.hex)}
-            showAlpha={false}
+            showAlpha={showAlpha}
+            onChange={(color) => onChange(showAlpha ? color.rgba : color.hex)}
           />
         ) : (
           <Input

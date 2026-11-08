@@ -61,6 +61,10 @@ interface AnnotationBoxProps {
     mode: "move" | "resize",
     handle?: ResizeHandle,
   ) => void;
+  onRotatePointerDown: (
+    event: React.PointerEvent<HTMLButtonElement>,
+    position: AnnotationPosition,
+  ) => void;
 
   onKeyDown: (event: React.KeyboardEvent<HTMLDivElement>) => void;
 
@@ -78,6 +82,7 @@ export function AnnotationBox({
   dragging = null,
   preview = false,
   onPointerDown,
+  onRotatePointerDown,
   onKeyDown,
   onChange,
   onRequestSign,
@@ -116,8 +121,11 @@ export function AnnotationBox({
       tabIndex={disabled || preview ? -1 : 0}
       aria-label={`${TYPE_LABEL[annotation.type]} annotation`}
       onPointerDown={(event) => {
-        if (!canMove || !editable) return;
-        onPointerDown(event, "move");
+        if (disabled || preview) return;
+
+        if (canMove) {
+          onPointerDown(event, "move");
+        }
       }}
       onKeyDown={onKeyDown}
       style={{
@@ -127,6 +135,8 @@ export function AnnotationBox({
         height: `${position.height}%`,
         zIndex: selected ? 15 : 1,
         touchAction: "none",
+        transform: `rotate(${position.rotation}deg)`,
+        transformOrigin: "center center",
       }}
       className={cn(
         "absolute outline-none",
@@ -241,6 +251,7 @@ export function AnnotationBox({
           type="button"
           tabIndex={-1}
           aria-label="Move annotation"
+          data-annotation-move-grip
           onPointerDown={(event) => onPointerDown(event, "move")}
           className={cn(
             "absolute left-0 top-0 z-5",
@@ -277,6 +288,30 @@ export function AnnotationBox({
           </button>
         ))}
 
+      {/* Rotation handle */}
+      {showRotationHandle && (
+        <div className="absolute left-1/2 -top-7 z-20 flex -translate-x-1/2 flex-col items-center">
+          <div className="h-4 w-px bg-brand" />
+
+          <button
+            type="button"
+            tabIndex={-1}
+            aria-label="Rotate annotation"
+            title="Drag to rotate"
+            onPointerDown={(event) => onRotatePointerDown(event, position)}
+            className={cn(
+              "flex size-5 items-center justify-center rounded-full",
+              "border border-brand bg-background text-brand shadow-sm",
+              "cursor-grab active:cursor-grabbing",
+              "hover:bg-brand hover:text-white",
+              "touch-none",
+            )}
+          >
+            <span className="text-xs">↻</span>
+          </button>
+        </div>
+      )}
+
       {/* Resize corner handles */}
       {showResizeHandles &&
         CORNERS.map((handle) => (
@@ -295,21 +330,6 @@ export function AnnotationBox({
             )}
           />
         ))}
-
-      {/* Rotation handle - visual placeholder until rotation geometry is implemented */}
-      {showRotationHandle && (
-        <div className="absolute left-1/2 -top-7 z-10 flex -translate-x-1/2 flex-col items-center">
-          <div className="h-4 w-px bg-brand" />
-
-          <div
-            className="flex size-4 items-center justify-center rounded-full border border-brand bg-background text-brand shadow-sm"
-            aria-label="Rotation handle"
-            title="Rotation controls coming next"
-          >
-            <span className="text-[10px]">↻</span>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -23,13 +23,6 @@ export function AppearanceSection({
 
       <div className="space-y-3">
         <PropertyInput
-          label="Stroke color"
-          type="color"
-          value={style.borderColor ?? "#000000"}
-          onChange={(borderColor) => onStyleChange({ borderColor })}
-        />
-
-        <PropertyInput
           label="Stroke width"
           type="number"
           min={0}
@@ -39,10 +32,20 @@ export function AppearanceSection({
             onStyleChange({ borderWidth: clamp(Number(value) || 0, 0, 20) })
           }
         />
+        {style.borderWidth != null && style.borderWidth > 0 && (
+          <PropertyInput
+            label="Stroke color"
+            type="color"
+            value={style.borderColor ?? "#000000"}
+            showAlpha
+            onChange={(borderColor) => onStyleChange({ borderColor })}
+          />
+        )}
 
         <PropertyInput
           label="Fill color"
           type="color"
+          showAlpha
           value={style.backgroundColor ?? "#ffffff"}
           onChange={(backgroundColor) => onStyleChange({ backgroundColor })}
         />

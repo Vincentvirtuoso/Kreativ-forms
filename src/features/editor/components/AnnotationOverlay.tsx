@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 
@@ -62,8 +62,15 @@ interface AnnotationOverlayProps {
   onChangeType?: (id: string, type: AnnotationType) => Promise<void> | void;
 }
 
-const noop = () => {};
-const noopAsync = async () => {};
+interface RotationSession {
+  pointerId: number;
+  annotation: Annotation;
+  startPosition: AnnotationPosition;
+  latestPosition: AnnotationPosition;
+  centerX: number;
+  centerY: number;
+  startAngle: number;
+}
 
 export function AnnotationOverlay({
   pageId,
@@ -76,10 +83,6 @@ export function AnnotationOverlay({
   onCreate,
   onChangeType,
 }: AnnotationOverlayProps) {
-  // --------------------------------------------------
-  // Store
-  // --------------------------------------------------
-
   const annotations = useAnnotationStore((state) => state.annotations);
 
   const selectedId = useAnnotationStore((state) => state.selectedAnnotationId);
@@ -94,9 +97,11 @@ export function AnnotationOverlay({
 
   const updatePosition = useAnnotationStore((state) => state.updatePosition);
 
-  // --------------------------------------------------
-  // Interaction state
-  // --------------------------------------------------
+  const beginHistoryGroup = useAnnotationStore(
+    (state) => state.beginHistoryGroup,
+  );
+
+  const endHistoryGroup = useAnnotationStore((state) => state.endHistoryGroup);
 
   const [interactionMode, setInteractionMode] =
     useState<InteractionMode>("select");
@@ -106,16 +111,26 @@ export function AnnotationOverlay({
   );
 
   const dragContainerRef = useRef<HTMLDivElement>(null);
+  const rotationSessionRef = useRef<RotationSession | null>(null);
 
   const canInteract = !disabled && !previewMode;
-
-  // --------------------------------------------------
-  // Portal and refs
-  // --------------------------------------------------
 
   const registerTap = useDoubleTap();
 
   const { portalRoot, containerRef: portalContainerRef } = usePortalRoot();
+
+  function focusWorkspace() {
+    requestAnimationFrame(() => {
+      dragContainerRef.current?.focus({ preventScroll: true });
+    });
+  }
+
+  function resetInteraction() {
+    selectAnnotation(null);
+    setInteractionMode("select");
+    setEditingSignatureId(null);
+    focusWorkspace();
+  }
 
   const shortcutRef = useKeyboardShortcuts<HTMLDivElement>(
     canInteract,
@@ -137,10 +152,12 @@ export function AnnotationOverlay({
       },
 
       escape: () => {
-        if (editingSignatureId) return;
+        if (editingSignatureId) {
+          setEditingSignatureId(null);
+          return;
+        }
 
-        setInteractionMode("select");
-        selectAnnotation(null);
+        resetInteraction();
       },
 
       delete: () => {
@@ -162,10 +179,6 @@ export function AnnotationOverlay({
     () => composeRefs(portalContainerRef, dragContainerRef, shortcutRef),
     [portalContainerRef, shortcutRef],
   );
-
-  // --------------------------------------------------
-  // Page annotations
-  // --------------------------------------------------
 
   const pageAnnotations = useMemo(
     () =>
@@ -189,18 +202,10 @@ export function AnnotationOverlay({
       annotation.id === editingSignatureId && annotation.type === "signature",
   );
 
-  // --------------------------------------------------
-  // Transform operations
-  // --------------------------------------------------
-
   const transform = useAnnotationTransform({
     onUpdate,
     updatePosition,
   });
-
-  // --------------------------------------------------
-  // Drag interaction
-  // --------------------------------------------------
 
   const {
     preview,
@@ -216,10 +221,6 @@ export function AnnotationOverlay({
     onPreviewPosition: updatePosition,
     onCommit: onUpdate,
   });
-
-  // --------------------------------------------------
-  // Annotation creation
-  // --------------------------------------------------
 
   async function createDefaultAnnotation(event: React.PointerEvent) {
     if (!canInteract || !onCreate || !dragContainerRef.current) {
@@ -252,10 +253,6 @@ export function AnnotationOverlay({
     }
   }
 
-  // --------------------------------------------------
-  // Pointer interactions
-  // --------------------------------------------------
-
   function beginInteraction(
     event: React.PointerEvent<HTMLElement>,
     annotation: Annotation,
@@ -264,12 +261,15 @@ export function AnnotationOverlay({
   ) {
     if (!canInteract || event.button !== 0) return;
 
-    // Tool-specific interaction restrictions.
-    if (interactionMode === "rotate") return;
-
-    if (mode === "move" && interactionMode === "resize") {
+    if (
+      mode === "move" &&
+      (interactionMode === "resize" || interactionMode === "rotate")
+    ) {
+      selectAnnotation(annotation.id);
       return;
     }
+
+    if (interactionMode === "rotate") return;
 
     if (
       mode === "resize" &&
@@ -281,7 +281,12 @@ export function AnnotationOverlay({
 
     const target = event.target as HTMLElement;
 
-    if (mode === "move" && target.closest("input, textarea, select, button")) {
+    if (
+      mode === "move" &&
+      target.closest(
+        "input, textarea, select, button:not([data-annotation-move-grip])",
+      )
+    ) {
       return;
     }
 
@@ -306,24 +311,114 @@ export function AnnotationOverlay({
     startDrag(event, annotation, mode, handle);
   }
 
-  // --------------------------------------------------
-  // Position updates
-  // --------------------------------------------------
-
-  function commitPosition(
-    annotation: Annotation,
-    position: AnnotationPosition,
+  function getPointerAngle(
+    clientX: number,
+    clientY: number,
+    centerX: number,
+    centerY: number,
   ) {
-    if (!canInteract) return;
-
-    updatePosition(annotation.id, position);
-
-    onUpdate(annotation.id, createPositionUpdate(annotation, position));
+    return Math.atan2(clientY - centerY, clientX - centerX) * (180 / Math.PI);
   }
 
-  // --------------------------------------------------
-  // Annotation deletion
-  // --------------------------------------------------
+  function normalizeRotation(rotation: number) {
+    return ((rotation % 360) + 360) % 360;
+  }
+
+function beginRotation(
+  event: React.PointerEvent<HTMLButtonElement>,
+  annotation: Annotation,
+  position: AnnotationPosition,
+) {
+  if (!canInteract || event.button !== 0) return;
+  beginHistoryGroup();
+
+  const container = dragContainerRef.current;
+
+  if (!container) return;
+
+  event.preventDefault();
+  event.stopPropagation();
+
+  const bounds = container.getBoundingClientRect();
+
+  if (!bounds.width || !bounds.height) return;
+
+  const centerX =
+    bounds.left + ((position.x + position.width / 2) / 100) * bounds.width;
+
+  const centerY =
+    bounds.top + ((position.y + position.height / 2) / 100) * bounds.height;
+
+  const startAngle = getPointerAngle(
+    event.clientX,
+    event.clientY,
+    centerX,
+    centerY,
+  );
+
+  rotationSessionRef.current = {
+    pointerId: event.pointerId,
+    annotation,
+    startPosition: { ...position },
+    latestPosition: { ...position },
+    centerX,
+    centerY,
+    startAngle,
+  };
+
+  selectAnnotation(annotation.id);
+  container.focus({ preventScroll: true });
+
+  try {
+    container.setPointerCapture(event.pointerId);
+  } catch {
+    rotationSessionRef.current = null;
+  }
+}
+
+  function handleRotationMove(event: React.PointerEvent<HTMLDivElement>) {
+    const session = rotationSessionRef.current;
+
+    if (!session || session.pointerId !== event.pointerId) return false;
+
+    const currentAngle = getPointerAngle(
+      event.clientX,
+      event.clientY,
+      session.centerX,
+      session.centerY,
+    );
+
+    const delta = currentAngle - session.startAngle;
+
+    const nextPosition: AnnotationPosition = {
+      ...session.startPosition,
+      rotation: normalizeRotation(session.startPosition.rotation + delta),
+    };
+
+    session.latestPosition = nextPosition;
+
+    updatePosition(session.annotation.id, nextPosition);
+
+    return true;
+  }
+
+  function finishRotation(commit: boolean) {
+    const session = rotationSessionRef.current;
+
+    if (!session) return;
+    endHistoryGroup();
+
+    rotationSessionRef.current = null;
+
+    if (commit) {
+      onUpdate(
+        session.annotation.id,
+        createPositionUpdate(session.annotation, session.latestPosition),
+      );
+    } else {
+      updatePosition(session.annotation.id, session.startPosition);
+    }
+  }
 
   async function deleteAnnotation(id: string) {
     if (!canInteract || !onDelete) return;
@@ -331,21 +426,13 @@ export function AnnotationOverlay({
     try {
       await onDelete(id);
 
-      if (selectedId === id) {
-        selectAnnotation(null);
-      }
-
-      if (editingSignatureId === id) {
-        setEditingSignatureId(null);
+      if (selectedId === id || editingSignatureId === id) {
+        resetInteraction();
       }
     } catch (error) {
       console.error("Failed to delete annotation", error);
     }
   }
-
-  // --------------------------------------------------
-  // Annotation type changes
-  // --------------------------------------------------
 
   async function changeType(annotation: Annotation, type: AnnotationType) {
     if (!canInteract || !onChangeType || annotation.type === type) {
@@ -363,10 +450,6 @@ export function AnnotationOverlay({
     }
   }
 
-  // --------------------------------------------------
-  // Signature editing
-  // --------------------------------------------------
-
   function handleSignatureSave(value: string) {
     if (!canInteract || !editingSignatureId) return;
 
@@ -380,10 +463,6 @@ export function AnnotationOverlay({
 
     setEditingSignatureId(null);
   }
-
-  // --------------------------------------------------
-  // Annotation styling
-  // --------------------------------------------------
 
   function handleStyleChange(
     annotation: Annotation,
@@ -404,10 +483,6 @@ export function AnnotationOverlay({
     updateAnnotation(annotation.id, update);
     onUpdate(annotation.id, update);
   }
-
-  // --------------------------------------------------
-  // Annotation value changes
-  // --------------------------------------------------
 
   function handleAnnotationChange(
     annotation: Annotation,
@@ -453,17 +528,12 @@ export function AnnotationOverlay({
     onUpdate(annotation.id, update);
   }
 
-  // --------------------------------------------------
-  // Keyboard transformations
-  // --------------------------------------------------
-
   function handleAnnotationKeyDown(
     event: React.KeyboardEvent<HTMLDivElement>,
     annotation: Annotation,
   ) {
     if (!canInteract) return;
 
-    // Let nested inputs and controls handle their own keys.
     if (event.target !== event.currentTarget) return;
 
     if (event.key === "Enter" || event.key === " ") {
@@ -481,8 +551,7 @@ export function AnnotationOverlay({
     if (event.key === "Escape") {
       event.preventDefault();
 
-      setInteractionMode("select");
-      selectAnnotation(null);
+      resetInteraction();
 
       return;
     }
@@ -512,7 +581,6 @@ export function AnnotationOverlay({
     const step = event.shiftKey ? KEY_STEP_LARGE : KEY_STEP;
 
     if (interactionMode === "rotate") {
-      // Rotation will be implemented with the transform model.
       return;
     }
 
@@ -525,36 +593,62 @@ export function AnnotationOverlay({
     transform.nudge(annotation, direction, event.shiftKey);
   }
 
-  // --------------------------------------------------
-  // Toolbar visibility
-  // --------------------------------------------------
+  useEffect(() => {
+    selectAnnotation(null);
+    setInteractionMode("select");
+    setEditingSignatureId(null);
+  }, [pageId, documentId, selectAnnotation]);
 
   const showToolbar =
     canInteract && !!selectedAnnotation && !!portalRoot && !editingSignatureId;
-
-  // --------------------------------------------------
-  // Render
-  // --------------------------------------------------
 
   return (
     <>
       <div
         ref={containerRef}
+        tabIndex={0}
         data-interaction-mode={interactionMode}
         className="absolute inset-0 overflow-hidden"
         style={{ touchAction: "manipulation" }}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerCancel}
-        onLostPointerCapture={handleLostPointerCapture}
+        onPointerMove={(event) => {
+          if (handleRotationMove(event)) return;
+
+          handlePointerMove(event);
+        }}
+        onPointerUp={(event) => {
+          if (rotationSessionRef.current?.pointerId === event.pointerId) {
+            finishRotation(true);
+            return;
+          }
+
+          handlePointerUp(event);
+        }}
+        onPointerCancel={(event) => {
+          if (rotationSessionRef.current?.pointerId === event.pointerId) {
+            finishRotation(false);
+            return;
+          }
+
+          handlePointerCancel(event);
+        }}
+        onLostPointerCapture={(event) => {
+          if (rotationSessionRef.current?.pointerId === event.pointerId) {
+            finishRotation(false);
+            return;
+          }
+
+          handleLostPointerCapture(event);
+        }}
         onPointerDown={(event) => {
           if (!canInteract) return;
-
           if (event.target !== event.currentTarget) return;
 
-          selectAnnotation(null);
+          const shouldCreate =
+            interactionMode === "select" && registerTap(event, "page");
 
-          if (interactionMode === "select" && registerTap(event, "page")) {
+          resetInteraction();
+
+          if (shouldCreate) {
             void createDefaultAnnotation(event);
           }
         }}
@@ -579,6 +673,9 @@ export function AnnotationOverlay({
               onPointerDown={(event, mode, handle) =>
                 beginInteraction(event, annotation, mode, handle)
               }
+              onRotatePointerDown={(event, position) =>
+                beginRotation(event, annotation, position)
+              }
               onKeyDown={(event) => handleAnnotationKeyDown(event, annotation)}
               onChange={(value) => handleAnnotationChange(annotation, value)}
               onRequestSign={() => {
@@ -593,7 +690,6 @@ export function AnnotationOverlay({
         {canInteract && <SnapGuides guides={guides} />}
       </div>
 
-      {/* Contextual toolbar */}
       {showToolbar &&
         selectedAnnotation &&
         portalRoot &&
@@ -608,12 +704,11 @@ export function AnnotationOverlay({
             onStyleChange={(changes) =>
               handleStyleChange(selectedAnnotation, changes)
             }
-            onDone={() => selectAnnotation(null)}
+            onDone={resetInteraction}
           />,
           portalRoot,
         )}
 
-      {/* Signature editor */}
       <SignatureDialog
         open={canInteract && !!editingSignatureId}
         portalRoot={portalRoot}

@@ -408,7 +408,7 @@ type SidebarProps = {
   setIsCollapsed: (collapsed: boolean) => void;
 };
 
-const Sidebar = ({ isCollapsed = false, setIsCollapsed }: SidebarProps) => {
+const Sidebar = ({ isCollapsed = true, setIsCollapsed }: SidebarProps) => {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const fullUrl = `${pathname}?${searchParams.toString()}`;

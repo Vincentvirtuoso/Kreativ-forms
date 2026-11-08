@@ -11,7 +11,11 @@ export function clamp(value: number, min: number, max: number) {
 
 export function positionsEqual(a: AnnotationPosition, b: AnnotationPosition) {
   return (
-    a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height
+    a.x === b.x &&
+    a.y === b.y &&
+    a.width === b.width &&
+    a.height === b.height &&
+    a.rotation === b.rotation
   );
 }
 

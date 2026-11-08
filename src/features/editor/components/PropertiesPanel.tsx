@@ -44,7 +44,7 @@ export function PropertiesPanel({
       />
       <aside
         aria-label="Properties panel"
-        className="absolute inset-y-0 right-0 z-20 flex w-[min(20rem,calc(100%-1rem))] flex-col border-l border-border bg-surface shadow-2xl animate-in slide-in-from-right duration-200 md:relative md:z-1 md:w-64 md:shrink-0 md:shadow-none md:animate-none"
+        className="absolute inset-y-0 right-0 z-20 flex w-[min(20rem,calc(100%-1rem))] flex-col border-l border-border bg-surface shadow-2xl animate-in slide-in-from-right duration-200 md:relative md:z-1 md:w-72 md:shrink-0 md:shadow-none md:animate-none"
       >
         <PanelHeader
           selectedAnnotation={selectedAnnotation}

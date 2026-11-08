@@ -1,5 +1,6 @@
 "use client";
 
+import { Button, Input } from "@splenddev/kreativ-ui";
 import {
   useCallback,
   useEffect,
@@ -46,10 +47,6 @@ export interface ColorPickerProps {
 
 const DEFAULT_COLOR = "#0D99FF";
 
-/* ------------------------------------------------------------------ */
-/* Shared class strings – keeps the JSX readable                      */
-/* ------------------------------------------------------------------ */
-
 const THUMB_BASE =
   "absolute w-4 h-4 border-2 border-white rounded-full pointer-events-none " +
   "shadow-[0_0_0_1px_rgba(0,0,0,0.2),0_1px_3px_rgba(0,0,0,0.35)] " +
@@ -59,19 +56,9 @@ const CHECKER_BG =
   "bg-white bg-[length:8px_8px] bg-[position:0_0,4px_4px] " +
   "bg-[image:linear-gradient(45deg,#c8c8c8_25%,transparent_25%,transparent_75%,#c8c8c8_75%),linear-gradient(45deg,#c8c8c8_25%,transparent_25%,transparent_75%,#c8c8c8_75%)]";
 
-const FIELD_BASE =
-  "flex items-center gap-0.5 h-7 min-w-0 px-2 " +
-  "border border-border rounded-[5px] bg-background text-xs tabular-nums " +
-  "transition-[border-color,box-shadow] duration-[120ms] " +
-  "focus-within:border-brand focus-within:ring-1 focus-within:ring-brand";
-
 const SLIDER_FOCUS =
   "focus-visible:outline-2 focus-visible:[outline-style:solid] " +
   "focus-visible:outline-offset-2 focus-visible:outline-brand";
-
-/* ------------------------------------------------------------------ */
-/* Color math helpers                                                 */
-/* ------------------------------------------------------------------ */
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
@@ -124,23 +111,55 @@ function toHex(r: number, g: number, b: number) {
 }
 
 function parseHexColor(input: string): HSVColor {
-  const clean = input.trim().replace(/^#/, "");
-  const normalized =
-    clean.length === 3 || clean.length === 4
-      ? clean
+  const clean = input.trim();
+
+  // Support CSS rgb() and rgba() values.
+  const rgbaMatch = clean.match(
+    /^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)(?:\s*,\s*([\d.]+)\s*)?\)$/i,
+  );
+
+  if (rgbaMatch) {
+    const r = clamp(Number(rgbaMatch[1]), 0, 255);
+    const g = clamp(Number(rgbaMatch[2]), 0, 255);
+    const b = clamp(Number(rgbaMatch[3]), 0, 255);
+    const a = clamp(
+      rgbaMatch[4] !== undefined ? Number(rgbaMatch[4]) : 1,
+      0,
+      1,
+    );
+
+    return {
+      ...rgbToHsv(r, g, b),
+      a,
+    };
+  }
+
+  // Support HEX, including shorthand and alpha HEX.
+  const normalized = clean.replace(/^#/, "");
+
+  const expanded =
+    normalized.length === 3 || normalized.length === 4
+      ? normalized
           .split("")
-          .map((c) => c + c)
+          .map((character) => character + character)
           .join("")
-      : clean;
-  if (!/^[\da-fA-F]{6}([\da-fA-F]{2})?$/.test(normalized)) {
+      : normalized;
+
+  if (!/^[\da-fA-F]{6}([\da-fA-F]{2})?$/.test(expanded)) {
     return { ...rgbToHsv(13, 153, 255), a: 1 };
   }
-  const r = parseInt(normalized.slice(0, 2), 16);
-  const g = parseInt(normalized.slice(2, 4), 16);
-  const b = parseInt(normalized.slice(4, 6), 16);
+
+  const r = parseInt(expanded.slice(0, 2), 16);
+  const g = parseInt(expanded.slice(2, 4), 16);
+  const b = parseInt(expanded.slice(4, 6), 16);
+
   const a =
-    normalized.length === 8 ? parseInt(normalized.slice(6, 8), 16) / 255 : 1;
-  return { ...rgbToHsv(r, g, b), a };
+    expanded.length === 8 ? parseInt(expanded.slice(6, 8), 16) / 255 : 1;
+
+  return {
+    ...rgbToHsv(r, g, b),
+    a,
+  };
 }
 
 function getColorValue(hsv: HSVColor): ColorPickerValue {
@@ -152,10 +171,6 @@ function getColorValue(hsv: HSVColor): ColorPickerValue {
     rgba: `rgba(${r}, ${g}, ${b}, ${Number(hsv.a.toFixed(3))})`,
   };
 }
-
-/* ------------------------------------------------------------------ */
-/* Pointer-drag hook                                                  */
-/* ------------------------------------------------------------------ */
 
 function useDrag(
   onMove: (x: number, y: number) => void,
@@ -220,10 +235,6 @@ function useDrag(
   };
 }
 
-/* ------------------------------------------------------------------ */
-/* EyeDropper typings                                                 */
-/* ------------------------------------------------------------------ */
-
 interface EyeDropperResult {
   sRGBHex: string;
 }
@@ -238,10 +249,6 @@ declare global {
     EyeDropper?: EyeDropperConstructor;
   }
 }
-
-/* ------------------------------------------------------------------ */
-/* Component                                                          */
-/* ------------------------------------------------------------------ */
 
 export default function ColorPicker({
   value,
@@ -379,8 +386,6 @@ export default function ColorPicker({
   const supportsEyedropper =
     typeof window !== "undefined" && "EyeDropper" in window;
 
-  /* ---------- dynamic inline styles only ---------- */
-
   const hueColorStyle: CSSProperties = {
     backgroundColor: `hsl(${hsv.h} 100% 50%)`,
   };
@@ -461,7 +466,7 @@ export default function ColorPicker({
               <div
                 className="absolute inset-0"
                 style={{
-                  background: `linear-gradient(to right, rgba(${r}, ${g}, ${b}, 0), ${color.hex})`,
+                  background: `linear-gradient(to right, rgba(${r}, ${g}, ${b}, 0), ${color.rgba})`,
                 }}
               />
             </div>
@@ -470,7 +475,6 @@ export default function ColorPicker({
         )}
       </div>
 
-      {/* Bottom controls – Figma-style */}
       <div className="flex items-center gap-1.5 min-w-0">
         <div
           className={`relative shrink-0 w-7 h-7 overflow-hidden border border-border rounded-[5px]${showAlpha ? " " + CHECKER_BG : ""}`}
@@ -480,59 +484,66 @@ export default function ColorPicker({
             style={{ background: showAlpha ? color.rgba : color.hex }}
           />
         </div>
-
-        <label className={`${FIELD_BASE} flex-1`}>
-          <span
-            className="shrink-0 text-text-muted text-xs leading-none"
-            aria-hidden="true"
-          >
-            #
-          </span>
-          <input
-            ref={hexRef}
-            value={hexText}
-            onChange={handleHexChange}
-            onBlur={handleHexBlur}
-            maxLength={6}
-            spellCheck={false}
-            autoComplete="off"
-            aria-label="HEX color"
-            disabled={disabled}
-            className="w-full min-w-0 p-0 border-0 outline-none bg-transparent text-inherit font-[inherit] tabular-nums tracking-[0.02em]"
-          />
-        </label>
-
-        {showAlpha && (
-          <label className={`${FIELD_BASE} shrink-0 basis-14`}>
-            <input
-              ref={alphaRef}
-              value={alphaText}
-              onChange={handleAlphaChange}
-              onBlur={handleAlphaBlur}
-              maxLength={3}
-              inputMode="numeric"
-              autoComplete="off"
-              aria-label="Opacity percentage"
-              disabled={disabled}
-              className="w-full min-w-0 p-0 border-0 outline-none bg-transparent text-inherit font-[inherit] tabular-nums tracking-[0.02em]"
-            />
+        <Input
+          size="xs"
+          ref={hexRef}
+          value={hexText}
+          onChange={handleHexChange}
+          onBlur={handleHexBlur}
+          maxLength={6}
+          spellCheck={false}
+          autoComplete="off"
+          aria-label="HEX color"
+          disabled={disabled}
+          startIcon={
             <span
               className="shrink-0 text-text-muted text-xs leading-none"
               aria-hidden="true"
             >
-              %
+              #
             </span>
-          </label>
+          }
+          inputClassName="pl-1"
+          className="flex-2"
+          variant="filled"
+        />
+
+        {showAlpha && (
+          <Input
+            endIcon={
+              <span
+                className="shrink-0 text-text-muted text-xs leading-none"
+                aria-hidden="true"
+              >
+                %
+              </span>
+            }
+            inputClassName="pr-1"
+            variant="filled"
+            size="xs"
+            ref={alphaRef}
+            value={alphaText}
+            onChange={handleAlphaChange}
+            onBlur={handleAlphaBlur}
+            maxLength={3}
+            inputMode="numeric"
+            autoComplete="off"
+            aria-label="Opacity percentage"
+            className="flex-1"
+            disabled={disabled}
+          />
         )}
 
         {supportsEyedropper && (
-          <button
+          <Button
             type="button"
             onClick={handleEyedropper}
             disabled={disabled}
             title="Pick color from screen"
             aria-label="Pick color from screen"
-            className="grid shrink-0 w-7 h-7 place-items-center p-0 border border-border rounded-[5px] bg-transparent text-inherit cursor-pointer transition-[background-color,border-color] duration-120 hover:enabled:bg-surface-muted focus-visible:border-brand focus-visible:ring-1 focus-visible:ring-brand focus-visible:outline-none"
+            size="xs"
+            variant="soft"
+            iconOnly
           >
             <svg
               viewBox="0 0 24 24"
@@ -543,7 +554,7 @@ export default function ColorPicker({
               <path d="M3 21v-3l9-9" />
               <path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z" />
             </svg>
-          </button>
+          </Button>
         )}
       </div>
     </div>
