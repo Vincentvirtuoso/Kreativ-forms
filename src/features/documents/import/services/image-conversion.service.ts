@@ -86,7 +86,12 @@ export class ImageConversionService {
   width,
   height,
   rotation: 0,
-  viewBox: [0, 0, width, height],
+  viewBox: {
+    x: 0,
+    y: 0,
+    width,
+    height,
+  },
 });
       }
 
