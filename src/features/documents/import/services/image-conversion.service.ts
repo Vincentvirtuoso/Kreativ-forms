@@ -82,10 +82,12 @@ export class ImageConversionService {
         });
 
         pages.push({
-          sourcePageNumber: pages.length + 1,
-          width,
-          height,
-        });
+  sourcePageNumber: pages.length + 1,
+  width,
+  height,
+  rotation: 0,
+  viewBox: [0, 0, width, height],
+});
       }
 
       throwIfImportAborted(signal);
