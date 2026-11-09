@@ -128,13 +128,13 @@ export function AnnotationToolbar({
 <div
   role="group"
   aria-label="Annotation interaction mode"
-  className="
-    pointer-events-auto flex items-center gap-1
-    rounded-xl border border-border
-    bg-background/95 p-1.5
-    shadow-lg backdrop-blur-xl
-    pointer-coarse:flex hidden
-  "
+ className="
+  pointer-events-auto hidden pointer-coarse:flex
+  items-center gap-1
+  rounded-xl border border-border
+  bg-background/95 p-1.5
+  shadow-lg backdrop-blur-xl
+"
 >
   {INTERACTION_MODES.map(({ mode, label, icon: Icon }) => {
     const active = interactionMode === mode;
