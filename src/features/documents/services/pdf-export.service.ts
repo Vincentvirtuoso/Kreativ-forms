@@ -1,10 +1,6 @@
 import {
   PDFDocument,
   StandardFonts,
-  rgb,
-  pushGraphicsState,
-  popGraphicsState,
-  concatTransformationMatrix,
 } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 
@@ -18,9 +14,12 @@ import type { HandwritingProfile } from "@/features/handwriting/domain/handwriti
 import { getHandwritingFontFamily } from "@/features/handwriting/services/handwriting-font-loader.service";
 import { DocumentWorkspace } from "./document-workspace.types";
 import { pdfjsLib } from "@/engines/pdf/pdfjs.client";
+
+import { PdfViewportService } from "./pdf-viewport.service";
+import { PdfExportValidationService } from "./pdf-export-validation.service";
 import { PdfFontService } from "./pdf-font.service";
 import { PdfSignatureService } from "./pdf-signature.service";
-
+import { PdfAnnotationRendererService } from "./pdf-annotation-renderer.service";
 import type { PdfFont } from "./pdf-font.service";
 import type {
   ExportOptions,
@@ -35,6 +34,11 @@ export class PdfExportService {
     private readonly handwritingProfiles: HandwritingProfileRepository,
     private readonly fontService = new PdfFontService();
     private readonly signatureService = new PdfSignatureService();
+    private readonly annotationRenderer =
+  new PdfAnnotationRendererService();
+    private readonly viewportService = new PdfViewportService();
+    private readonly validationService =
+  new PdfExportValidationService();
   ) {}
 
   async export(
@@ -64,56 +68,28 @@ export class PdfExportService {
       );
     }
 
-    const selectedPages = options.pageIds
-      ? (() => {
-          if (options.pageIds!.length === 0) {
-            throw new Error("Select at least one page to export.");
-          }
+    const selectedPages = this.validationService.selectPages(
+  workspace,
+  options,
+  sourcePages.length,
+);
 
-          const uniqueIds = new Set(options.pageIds);
+    const selectedPageIds =
+  this.validationService.getSelectedPageIds(selectedPages);
 
-          if (uniqueIds.size !== options.pageIds.length) {
-            throw new Error("Duplicate pages were selected.");
-          }
-
-          const pages = options.pageIds!.map((id) => {
-            const page = workspace.pages.find((item) => item.id === id);
-
-            if (!page) {
-              throw new Error(`Could not find page "${id}".`);
-            }
-
-            return page;
-          });
-
-          return pages.sort((a, b) => a.order - b.order);
-        })()
-      : [...workspace.pages].sort((a, b) => a.order - b.order);
-
-    for (const page of selectedPages) {
-      if (
-        !Number.isInteger(page.order) ||
-        page.order < 0 ||
-        page.order >= sourcePages.length
-      ) {
-        throw new Error(`Invalid PDF page order for page "${page.id}".`);
-      }
-    }
-
-    const selectedPageIds = new Set(selectedPages.map((page) => page.id));
-
-    const viewportGeometries = await this.getViewportGeometries(
-      workspace.workingPdf.blob,
-      selectedPages,
-    );
+    const viewportGeometries =
+  await this.viewportService.getGeometries(
+    workspace.workingPdf.blob,
+    selectedPages,
+  );
 
     const annotations = allAnnotations.filter((annotation) =>
       selectedPageIds.has(annotation.pageId),
     );
 
     if (options.validateRequired !== false) {
-      this.validateRequiredAnnotations(annotations);
-    }
+  this.validationService.validateRequiredAnnotations(annotations);
+}
 
     const pdf = await PDFDocument.create();
 
@@ -155,8 +131,12 @@ const standardFonts = await this.fontService.loadStandardFonts(pdf);
   standardFonts,
 ); 
 
-      await this.renderAnnotation(page, annotation, font, viewport);
-    }
+      await this.annotationRenderer.render(
+  page,
+  annotation,
+  font,
+  viewport,
+);
 
     const bytes = await pdf.save();
 
@@ -170,330 +150,6 @@ const standardFonts = await this.fontService.loadStandardFonts(pdf);
       }),
       filename,
     };
-  }
-
-  private validateRequiredAnnotations(annotations: Annotation[]) {
-    const missing = annotations.filter((annotation) => {
-      if (!annotation.required) return false;
-
-      switch (annotation.type) {
-        case "text":
-        case "date":
-          return !annotation.value.trim();
-
-        case "signature":
-          return !annotation.value;
-
-        case "checkbox":
-          return !annotation.checked;
-      }
-    });
-
-    if (missing.length > 0) {
-      throw new Error(
-        `${missing.length} required field(s) have not been completed.`,
-      );
-    }
-  }
-
-  private async renderAnnotation(
-    page: ReturnType<PDFDocument["getPages"]>[number],
-    annotation: Annotation,
-    font: PdfFont,
-    viewport: ViewportGeometry,
-  ) {
-    if (
-      (annotation.type === "text" || annotation.type === "date") &&
-      !annotation.value.trim()
-    ) {
-      return;
-    }
-
-    if (annotation.type === "signature" && !annotation.value) {
-      return;
-    }
-
-    const style = annotation.style;
-    const opacity = style.opacity ?? 1;
-
-    const x = (annotation.position.x / 100) * viewport.width;
-    const y = (annotation.position.y / 100) * viewport.height;
-    const width = (annotation.position.width / 100) * viewport.width;
-    const height = (annotation.position.height / 100) * viewport.height;
-
-    const [a, b, c, d, e, f] = viewport.transform;
-    const determinant = a * d - b * c;
-
-    if (Math.abs(determinant) < Number.EPSILON) {
-      throw new Error("Invalid PDF viewport transformation.");
-    }
-
-    const inverse = (px: number, py: number) => {
-      const tx = px - e;
-      const ty = py - f;
-
-      return {
-        x: (d * tx - c * ty) / determinant,
-        y: (-b * tx + a * ty) / determinant,
-      };
-    };
-
-    const angle = (annotation.position.rotation * Math.PI) / 180;
-    const cos = Math.cos(angle);
-    const sin = Math.sin(angle);
-
-    const centerX = x + width / 2;
-    const centerY = y + height / 2;
-
-    const rotatePoint = (px: number, py: number) => {
-      const dx = px - centerX;
-      const dy = py - centerY;
-
-      return {
-        x: centerX + cos * dx - sin * dy,
-        y: centerY + sin * dx + cos * dy,
-      };
-    };
-
-    const inverseRotated = (px: number, py: number) => {
-      const point = rotatePoint(px, py);
-      return inverse(point.x, point.y);
-    };
-
-    const bottomLeft = inverseRotated(x, y + height);
-    const bottomRight = inverseRotated(x + width, y + height);
-    const topLeft = inverseRotated(x, y);
-
-    const matrixA = (bottomRight.x - bottomLeft.x) / width;
-    const matrixB = (bottomRight.y - bottomLeft.y) / width;
-    const matrixC = (topLeft.x - bottomLeft.x) / height;
-    const matrixD = (topLeft.y - bottomLeft.y) / height;
-
-    page.pushOperators(
-      pushGraphicsState(),
-      concatTransformationMatrix(
-        matrixA,
-        matrixB,
-        matrixC,
-        matrixD,
-        bottomLeft.x,
-        bottomLeft.y,
-      ),
-    );
-
-    try {
-      const viewportRect = {
-        x: 0,
-        y: 0,
-        width,
-        height,
-      };
-
-      if (style.backgroundColor) {
-        page.drawRectangle({
-          ...viewportRect,
-          color: this.parseColor(style.backgroundColor),
-          opacity,
-        });
-      }
-
-      if (style.borderColor && (style.borderWidth ?? 0) > 0) {
-        page.drawRectangle({
-          ...viewportRect,
-          borderColor: this.parseColor(style.borderColor),
-          borderWidth: style.borderWidth,
-          opacity,
-        });
-      }
-
-      switch (annotation.type) {
-        case "text":
-        case "date": {
-          this.drawText(
-            page,
-            annotation.value,
-            viewportRect,
-            font,
-            style,
-            opacity,
-          );
-          break;
-        }
-
-        case "checkbox": {
-          if (annotation.checked) {
-            const inset = Math.min(width, height) * 0.2;
-
-            page.drawLine({
-              start: {
-                x: inset,
-                y: height * 0.48,
-              },
-              end: {
-                x: width * 0.43,
-                y: inset,
-              },
-              thickness: Math.max(1, width * 0.07),
-              color: this.parseColor(style.color ?? "#111827"),
-              opacity,
-            });
-
-            page.drawLine({
-              start: {
-                x: width * 0.43,
-                y: inset,
-              },
-              end: {
-                x: width - inset,
-                y: height - inset,
-              },
-              thickness: Math.max(1, width * 0.07),
-              color: this.parseColor(style.color ?? "#111827"),
-              opacity,
-            });
-          }
-          break;
-        }
-
-        case "signature": {
-  await this.signatureService.draw(
-    page,
-    annotation.value ?? "",
-    viewportRect,
-    opacity,
-  );
-  break;
-}
-      }
-    } finally {
-      page.pushOperators(popGraphicsState());
-    }
-  }
-
-  private drawText(
-    page: ReturnType<PDFDocument["getPages"]>[number],
-    value: string,
-    rect: { x: number; y: number; width: number; height: number },
-    font: PdfFont,
-    style: Annotation["style"],
-    opacity: number,
-  ) {
-    const fontSize = Math.max(1, (style.fontSize ?? 16) * 0.75);
-    const padding = 2;
-    const maxWidth = Math.max(1, rect.width - padding * 2);
-    const lineHeight = fontSize * 1.2;
-
-    const lines = this.wrapText(value, font, fontSize, maxWidth);
-
-    let currentY = rect.y + rect.height - fontSize - padding;
-
-    for (const line of lines) {
-      if (currentY < rect.y) break;
-
-      const textWidth = font.widthOfTextAtSize(line, fontSize);
-
-      let textX = rect.x + padding;
-
-      if (style.textAlign === "center") {
-        textX = rect.x + (rect.width - textWidth) / 2;
-      } else if (style.textAlign === "right") {
-        textX = rect.x + rect.width - textWidth - padding;
-      }
-
-      page.drawText(line, {
-        x: textX,
-        y: currentY,
-        size: fontSize,
-        font,
-        color: this.parseColor(style.color ?? "#111827"),
-        opacity,
-      });
-
-      currentY -= lineHeight;
-    }
-  }
-
-  private wrapText(
-    value: string,
-    font: PdfFont,
-    fontSize: number,
-    maxWidth: number,
-  ): string[] {
-    const paragraphs = value.split(/\r?\n/);
-    const lines: string[] = [];
-
-    for (const paragraph of paragraphs) {
-      const words = paragraph.split(/\s+/);
-      let line = "";
-
-      for (const word of words) {
-        const candidate = line ? `${line} ${word}` : word;
-
-        if (line && font.widthOfTextAtSize(candidate, fontSize) > maxWidth) {
-          lines.push(line);
-          line = word;
-        } else {
-          line = candidate;
-        }
-      }
-
-      lines.push(line);
-    }
-
-    return lines;
-  }
-
-  private async getViewportGeometries(
-    blob: Blob,
-    pages: DocumentWorkspace["pages"],
-  ): Promise<Map<PageId, ViewportGeometry>> {
-    const loadingTask = pdfjsLib.getDocument({
-      data: new Uint8Array(await blob.arrayBuffer()),
-    });
-
-    try {
-      const document = await loadingTask.promise;
-      const geometries = new Map<PageId, ViewportGeometry>();
-
-      for (const metadata of pages) {
-        const page = await document.getPage(metadata.order + 1);
-
-        try {
-          const viewport = page.getViewport({ scale: 1 });
-
-          geometries.set(metadata.id, {
-            width: viewport.width,
-            height: viewport.height,
-            transform: [...viewport.transform],
-            rotation: (((viewport.rotation % 360) + 360) % 360) as
-              | 0
-              | 90
-              | 180
-              | 270,
-          });
-        } finally {
-          page.cleanup();
-        }
-      }
-
-      return geometries;
-    } finally {
-      await loadingTask.destroy();
-    }
-  }
-
-  private parseColor(value: string) {
-    const hex = value.replace("#", "");
-
-    if (!/^[0-9a-f]{6}$/i.test(hex)) {
-      return rgb(0, 0, 0);
-    }
-
-    return rgb(
-      parseInt(hex.slice(0, 2), 16) / 255,
-      parseInt(hex.slice(2, 4), 16) / 255,
-      parseInt(hex.slice(4, 6), 16) / 255,
-    );
   }
 
   private sanitizeFilename(value: string) {
