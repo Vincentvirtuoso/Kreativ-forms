@@ -695,17 +695,19 @@ function beginRotation(
         portalRoot &&
         createPortal(
           <AnnotationToolbar
-            annotation={selectedAnnotation}
-            canChangeType={!!onChangeType}
-            canDelete={!!onDelete}
-            onChangeType={(type) => void changeType(selectedAnnotation, type)}
-            onDelete={() => void deleteAnnotation(selectedAnnotation.id)}
-            onSign={() => setEditingSignatureId(selectedAnnotation.id)}
-            onStyleChange={(changes) =>
-              handleStyleChange(selectedAnnotation, changes)
-            }
-            onDone={resetInteraction}
-          />,
+  annotation={selectedAnnotation}
+  interactionMode={interactionMode}
+  onInteractionModeChange={setInteractionMode}
+  canChangeType={!!onChangeType}
+  canDelete={!!onDelete}
+  onChangeType={(type) => void changeType(selectedAnnotation, type)}
+  onDelete={() => void deleteAnnotation(selectedAnnotation.id)}
+  onSign={() => setEditingSignatureId(selectedAnnotation.id)}
+  onStyleChange={(changes) =>
+    handleStyleChange(selectedAnnotation, changes)
+  }
+  onDone={resetInteraction}
+/>,
           portalRoot,
         )}
 
