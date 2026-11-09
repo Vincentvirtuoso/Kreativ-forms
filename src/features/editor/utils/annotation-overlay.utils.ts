@@ -66,3 +66,12 @@ export function computePosition(
     ),
   };
 }
+
+export function normalizePosition(
+  position: AnnotationPosition,
+): AnnotationPosition {
+  return {
+    ...position,
+    rotation: Number.isFinite(position.rotation) ? position.rotation : 0,
+  };
+}

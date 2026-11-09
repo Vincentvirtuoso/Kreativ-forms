@@ -1,6 +1,5 @@
-
 import type { PageId } from "@/features/documents/domain/document.types";
-import type { DocumentWorkspace } from "./document-workspace.types";
+import type { DocumentWorkspace } from "../../documents/services/document-workspace.types";
 
 import { pdfjsLib } from "@/engines/pdf/pdfjs.client";
 

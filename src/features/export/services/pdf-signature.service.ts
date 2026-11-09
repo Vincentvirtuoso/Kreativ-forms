@@ -16,10 +16,7 @@ export class PdfSignatureService {
         ? await page.doc.embedPng(bytes)
         : await page.doc.embedJpg(bytes);
 
-    const dimensions = image.scaleToFit(
-      rect.width,
-      rect.height,
-    );
+    const dimensions = image.scaleToFit(rect.width, rect.height);
 
     page.drawImage(image, {
       x: rect.x + (rect.width - dimensions.width) / 2,

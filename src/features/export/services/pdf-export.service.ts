@@ -1,44 +1,30 @@
-import {
-  PDFDocument,
-  StandardFonts,
-} from "pdf-lib";
+import { PDFDocument } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 
-import type { Annotation } from "@/features/editor/domain/annotation.types";
-import type { DocumentId, PageId } from "../domain/document.types";
-import type { DocumentLoaderService } from "./document-loader.service";
+import type { DocumentId } from "../../documents/domain/document.types";
+import type { DocumentLoaderService } from "../../documents/services/document-loader.service";
 
 import type { AnnotationRepository } from "@/features/editor/repositories/annotation.repository";
 import type { HandwritingProfileRepository } from "@/features/handwriting/repositories/handwriting-profile.repository";
-import type { HandwritingProfile } from "@/features/handwriting/domain/handwriting-profile.types";
-import { getHandwritingFontFamily } from "@/features/handwriting/services/handwriting-font-loader.service";
-import { DocumentWorkspace } from "./document-workspace.types";
-import { pdfjsLib } from "@/engines/pdf/pdfjs.client";
 
+import { PdfFontService } from "./pdf-font.service";
 import { PdfViewportService } from "./pdf-viewport.service";
 import { PdfExportValidationService } from "./pdf-export-validation.service";
-import { PdfFontService } from "./pdf-font.service";
-import { PdfSignatureService } from "./pdf-signature.service";
 import { PdfAnnotationRendererService } from "./pdf-annotation-renderer.service";
+
 import type { PdfFont } from "./pdf-font.service";
-import type {
-  ExportOptions,
-  ExportResult,
-  ViewportGeometry,
-} from "../domain/export.types";
+
+import type { ExportOptions, ExportResult } from "../domain/export.types";
 
 export class PdfExportService {
   constructor(
     private readonly documents: DocumentLoaderService,
     private readonly annotations: AnnotationRepository,
     private readonly handwritingProfiles: HandwritingProfileRepository,
-    private readonly fontService = new PdfFontService();
-    private readonly signatureService = new PdfSignatureService();
-    private readonly annotationRenderer =
-  new PdfAnnotationRendererService();
-    private readonly viewportService = new PdfViewportService();
-    private readonly validationService =
-  new PdfExportValidationService();
+    private readonly fontService = new PdfFontService(),
+    private readonly annotationRenderer = new PdfAnnotationRendererService(),
+    private readonly viewportService = new PdfViewportService(),
+    private readonly validationService = new PdfExportValidationService(),
   ) {}
 
   async export(
@@ -69,27 +55,26 @@ export class PdfExportService {
     }
 
     const selectedPages = this.validationService.selectPages(
-  workspace,
-  options,
-  sourcePages.length,
-);
+      workspace,
+      options,
+      sourcePages.length,
+    );
 
     const selectedPageIds =
-  this.validationService.getSelectedPageIds(selectedPages);
+      this.validationService.getSelectedPageIds(selectedPages);
 
-    const viewportGeometries =
-  await this.viewportService.getGeometries(
-    workspace.workingPdf.blob,
-    selectedPages,
-  );
+    const viewportGeometries = await this.viewportService.getGeometries(
+      workspace.workingPdf.blob,
+      selectedPages,
+    );
 
     const annotations = allAnnotations.filter((annotation) =>
       selectedPageIds.has(annotation.pageId),
     );
 
     if (options.validateRequired !== false) {
-  this.validationService.validateRequiredAnnotations(annotations);
-}
+      this.validationService.validateRequiredAnnotations(annotations);
+    }
 
     const pdf = await PDFDocument.create();
 
@@ -109,9 +94,7 @@ export class PdfExportService {
     );
 
     const fontCache = new Map<string, PdfFont>();
-
-const standardFonts = await this.fontService.loadStandardFonts(pdf);
-    const boldFont = await pdf.embedFont(StandardFonts.HelveticaBold);
+    const standardFonts = await this.fontService.loadStandardFonts(pdf);
 
     for (const annotation of annotations) {
       const page = pageMap.get(annotation.pageId);
@@ -124,19 +107,15 @@ const standardFonts = await this.fontService.loadStandardFonts(pdf);
       }
 
       const font = await this.fontService.resolve(
-  annotation,
-  profiles,
-  pdf,
-  fontCache,
-  standardFonts,
-); 
+        annotation,
+        profiles,
+        pdf,
+        fontCache,
+        standardFonts,
+      );
 
-      await this.annotationRenderer.render(
-  page,
-  annotation,
-  font,
-  viewport,
-);
+      await this.annotationRenderer.render(page, annotation, font, viewport);
+    }
 
     const bytes = await pdf.save();
 
@@ -152,7 +131,7 @@ const standardFonts = await this.fontService.loadStandardFonts(pdf);
     };
   }
 
-  private sanitizeFilename(value: string) {
+  private sanitizeFilename(value: string): string {
     return value.replace(/[<>:"/\\|?*\x00-\x1F]/g, "-").trim() || "document";
   }
 }

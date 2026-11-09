@@ -211,6 +211,14 @@ export const useAnnotationStore = create<AnnotationState>((set) => ({
           : annotation,
       );
 
+      if (!Number.isFinite(position.rotation)) {
+        console.error("Invalid rotation passed to updatePosition:", {
+          id,
+          position,
+        });
+        console.trace();
+      }
+
       return commitAnnotations(state, annotations);
     }),
 

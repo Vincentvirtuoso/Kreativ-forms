@@ -1,4 +1,4 @@
-import type { PageId } from "./document.types";
+import { PageId } from "@/features/documents/domain/document.types";
 
 export interface ExportOptions {
   filename?: string;

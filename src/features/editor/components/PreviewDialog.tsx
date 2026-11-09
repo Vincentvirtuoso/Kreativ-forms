@@ -5,7 +5,7 @@ import { Download, Eye, X } from "lucide-react";
 import { Button } from "@splenddev/kreativ-ui/components";
 
 import type { DocumentPage } from "@/features/documents/domain/document.types";
-import type { ExportOptions } from "@/features/documents/services/pdf-export.service";
+import type { ExportOptions } from "@/features/export/domain/export.types";
 
 import { PdfDocumentViewer } from "./PdfDocumentViewer";
 import { ExportDialog } from "./ExportDialog";

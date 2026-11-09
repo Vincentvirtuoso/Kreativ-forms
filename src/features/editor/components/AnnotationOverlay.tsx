@@ -321,60 +321,66 @@ export function AnnotationOverlay({
   }
 
   function normalizeRotation(rotation: number) {
+    if (!Number.isFinite(rotation)) return 0;
+
     return ((rotation % 360) + 360) % 360;
   }
 
-function beginRotation(
-  event: React.PointerEvent<HTMLButtonElement>,
-  annotation: Annotation,
-  position: AnnotationPosition,
-) {
-  if (!canInteract || event.button !== 0) return;
-  beginHistoryGroup();
+  function beginRotation(
+    event: React.PointerEvent<HTMLButtonElement>,
+    annotation: Annotation,
+    position: AnnotationPosition,
+  ) {
+    if (!canInteract || event.button !== 0) return;
+    beginHistoryGroup();
 
-  const container = dragContainerRef.current;
+    const container = dragContainerRef.current;
 
-  if (!container) return;
+    if (!container) return;
 
-  event.preventDefault();
-  event.stopPropagation();
+    event.preventDefault();
+    event.stopPropagation();
 
-  const bounds = container.getBoundingClientRect();
+    const bounds = container.getBoundingClientRect();
 
-  if (!bounds.width || !bounds.height) return;
+    if (!bounds.width || !bounds.height) return;
 
-  const centerX =
-    bounds.left + ((position.x + position.width / 2) / 100) * bounds.width;
+    const centerX =
+      bounds.left + ((position.x + position.width / 2) / 100) * bounds.width;
 
-  const centerY =
-    bounds.top + ((position.y + position.height / 2) / 100) * bounds.height;
+    const centerY =
+      bounds.top + ((position.y + position.height / 2) / 100) * bounds.height;
 
-  const startAngle = getPointerAngle(
-    event.clientX,
-    event.clientY,
-    centerX,
-    centerY,
-  );
+    const startAngle = getPointerAngle(
+      event.clientX,
+      event.clientY,
+      centerX,
+      centerY,
+    );
+    const startPosition: AnnotationPosition = {
+      ...position,
+      rotation: Number.isFinite(position.rotation) ? position.rotation : 0,
+    };
 
-  rotationSessionRef.current = {
-    pointerId: event.pointerId,
-    annotation,
-    startPosition: { ...position },
-    latestPosition: { ...position },
-    centerX,
-    centerY,
-    startAngle,
-  };
+    rotationSessionRef.current = {
+      pointerId: event.pointerId,
+      annotation,
+      startPosition,
+      latestPosition: startPosition,
+      centerX,
+      centerY,
+      startAngle,
+    };
 
-  selectAnnotation(annotation.id);
-  container.focus({ preventScroll: true });
+    selectAnnotation(annotation.id);
+    container.focus({ preventScroll: true });
 
-  try {
-    container.setPointerCapture(event.pointerId);
-  } catch {
-    rotationSessionRef.current = null;
+    try {
+      container.setPointerCapture(event.pointerId);
+    } catch {
+      rotationSessionRef.current = null;
+    }
   }
-}
 
   function handleRotationMove(event: React.PointerEvent<HTMLDivElement>) {
     const session = rotationSessionRef.current;
@@ -389,10 +395,13 @@ function beginRotation(
     );
 
     const delta = currentAngle - session.startAngle;
+    const deltaDegrees = delta * (180 / Math.PI);
 
-    const nextPosition: AnnotationPosition = {
+    const nextPosition = {
       ...session.startPosition,
-      rotation: normalizeRotation(session.startPosition.rotation + delta),
+      rotation: normalizeRotation(
+        session.startPosition.rotation + deltaDegrees,
+      ),
     };
 
     session.latestPosition = nextPosition;
@@ -695,19 +704,19 @@ function beginRotation(
         portalRoot &&
         createPortal(
           <AnnotationToolbar
-  annotation={selectedAnnotation}
-  interactionMode={interactionMode}
-  onInteractionModeChange={setInteractionMode}
-  canChangeType={!!onChangeType}
-  canDelete={!!onDelete}
-  onChangeType={(type) => void changeType(selectedAnnotation, type)}
-  onDelete={() => void deleteAnnotation(selectedAnnotation.id)}
-  onSign={() => setEditingSignatureId(selectedAnnotation.id)}
-  onStyleChange={(changes) =>
-    handleStyleChange(selectedAnnotation, changes)
-  }
-  onDone={resetInteraction}
-/>,
+            annotation={selectedAnnotation}
+            interactionMode={interactionMode}
+            onInteractionModeChange={setInteractionMode}
+            canChangeType={!!onChangeType}
+            canDelete={!!onDelete}
+            onChangeType={(type) => void changeType(selectedAnnotation, type)}
+            onDelete={() => void deleteAnnotation(selectedAnnotation.id)}
+            onSign={() => setEditingSignatureId(selectedAnnotation.id)}
+            onStyleChange={(changes) =>
+              handleStyleChange(selectedAnnotation, changes)
+            }
+            onDone={resetInteraction}
+          />,
           portalRoot,
         )}
 

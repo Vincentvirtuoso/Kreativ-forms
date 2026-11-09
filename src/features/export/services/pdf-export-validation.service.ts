@@ -1,9 +1,8 @@
-
 import type { Annotation } from "@/features/editor/domain/annotation.types";
 import type { PageId } from "@/features/documents/domain/document.types";
 
 import type { ExportOptions } from "../domain/export.types";
-import type { DocumentWorkspace } from "./document-workspace.types";
+import type { DocumentWorkspace } from "../../documents/services/document-workspace.types";
 
 export class PdfExportValidationService {
   selectPages(
@@ -45,18 +44,14 @@ export class PdfExportValidationService {
         page.order < 0 ||
         page.order >= sourcePageCount
       ) {
-        throw new Error(
-          `Invalid PDF page order for page "${page.id}".`,
-        );
+        throw new Error(`Invalid PDF page order for page "${page.id}".`);
       }
     }
 
     return pages;
   }
 
-  validateRequiredAnnotations(
-    annotations: Annotation[],
-  ): void {
+  validateRequiredAnnotations(annotations: Annotation[]): void {
     const missing = annotations.filter((annotation) => {
       if (!annotation.required) return false;
 
@@ -80,9 +75,7 @@ export class PdfExportValidationService {
     }
   }
 
-  getSelectedPageIds(
-    pages: DocumentWorkspace["pages"],
-  ): Set<PageId> {
+  getSelectedPageIds(pages: DocumentWorkspace["pages"]): Set<PageId> {
     return new Set(pages.map((page) => page.id));
   }
 }

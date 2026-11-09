@@ -13,6 +13,7 @@ import { ANNOTATION_RULES } from "../domain/annotation.rules";
 import {
   computePosition,
   createPositionUpdate,
+  normalizePosition,
   positionsEqual,
 } from "../utils/annotation-overlay.utils";
 
@@ -94,7 +95,7 @@ export function useAnnotationDrag({
       resetDrag(dragRef.current.pointerId);
     }
 
-    const initialPosition = { ...annotation.position };
+    const initialPosition = normalizePosition(annotation.position);
 
     dragRef.current = {
       id: annotation.id,

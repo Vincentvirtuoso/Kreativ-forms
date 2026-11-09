@@ -13,8 +13,7 @@ import { cn } from "@/lib/cn";
 import { Modal } from "@/components/ui/modal";
 
 import type { DocumentPage } from "@/features/documents/domain/document.types";
-import { ExportOptions } from "@/features/documents/services/pdf-export.service";
-import { RadioGroup } from "@/components/ui/radio-group";
+import type { ExportOptions } from "@/features/export/domain/export.types";
 
 type ExportMode = "all" | "current" | "selected";
 

@@ -29,13 +29,11 @@ import type {
 import { DocumentPersistenceService } from "@/features/documents/services/document-persistence.service";
 import { useDocumentSaveGuard } from "../hooks/useDocumentSaveGuard";
 import { PreviewDialog } from "./PreviewDialog";
-import {
-  ExportOptions,
-  PdfExportService,
-} from "@/features/documents/services/pdf-export.service";
+import { PdfExportService } from "@/features/export/services/pdf-export.service";
 import { DocumentLoaderService } from "@/features/documents/services/document-loader.service";
 import { getHandwritingProfileRepository } from "@/features/handwriting/repositories/handwriting-repository.factory";
 import { downloadPdf } from "@/features/documents/utils/pdf-download.util";
+import type { ExportOptions } from "@/features/export/domain/export.types";
 
 type HistoryDirection = "undo" | "redo";
 

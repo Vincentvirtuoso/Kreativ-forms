@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
 import { DM_Sans, Space_Grotesk, IBM_Plex_Mono } from "next/font/google";
 
+import "@fontsource-variable/dm-sans";
+import "@fontsource-variable/inter";
+import "@fontsource-variable/roboto";
+
 import "@splenddev/kreativ-ui/styles.css";
 import "./globals.css";
 import { Providers } from "../components/providers/Providers";

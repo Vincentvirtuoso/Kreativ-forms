@@ -1,4 +1,3 @@
-
 import {
   pushGraphicsState,
   popGraphicsState,
@@ -9,10 +8,7 @@ import {
 
 import type { Annotation } from "@/features/editor/domain/annotation.types";
 
-import type {
-  PdfRectangle,
-  ViewportGeometry,
-} from "../domain/export.types";
+import type { PdfRectangle, ViewportGeometry } from "../domain/export.types";
 
 import type { PdfFont } from "./pdf-font.service";
 import { PdfSignatureService } from "./pdf-signature.service";
@@ -42,10 +38,10 @@ export class PdfAnnotationRendererService {
 
     const x = (annotation.position.x / 100) * viewport.width;
     const y = (annotation.position.y / 100) * viewport.height;
-    const width =
-      (annotation.position.width / 100) * viewport.width;
-    const height =
-      (annotation.position.height / 100) * viewport.height;
+    const width = (annotation.position.width / 100) * viewport.width;
+    const height = (annotation.position.height / 100) * viewport.height;
+
+    if (width <= 0 || height <= 0) return;
 
     const [a, b, c, d, e, f] = viewport.transform;
     const determinant = a * d - b * c;
@@ -64,9 +60,11 @@ export class PdfAnnotationRendererService {
       };
     };
 
-    const angle =
-      (annotation.position.rotation * Math.PI) / 180;
-
+    // CSS positive rotation is clockwise in viewport coordinates.
+    const rotation = Number.isFinite(annotation.position.rotation)
+      ? annotation.position.rotation
+      : 0;
+    const angle = (rotation * Math.PI) / 180;
     const cos = Math.cos(angle);
     const sin = Math.sin(angle);
 
@@ -109,6 +107,7 @@ export class PdfAnnotationRendererService {
       ),
     );
 
+
     try {
       const rect: PdfRectangle = {
         x: 0,
@@ -117,18 +116,26 @@ export class PdfAnnotationRendererService {
         height,
       };
 
-      if (style.backgroundColor) {
+      const backgroundColor = style.backgroundColor
+        ? this.parseColor(style.backgroundColor)
+        : null;
+
+      const borderColor = style.borderColor
+        ? this.parseColor(style.borderColor)
+        : null;
+
+      if (backgroundColor) {
         page.drawRectangle({
           ...rect,
-          color: this.parseColor(style.backgroundColor),
+          color: backgroundColor,
           opacity,
         });
       }
 
-      if (style.borderColor && (style.borderWidth ?? 0) > 0) {
+      if (borderColor && (style.borderWidth ?? 0) > 0) {
         page.drawRectangle({
           ...rect,
-          borderColor: this.parseColor(style.borderColor),
+          borderColor,
           borderWidth: style.borderWidth,
           opacity,
         });
@@ -137,14 +144,7 @@ export class PdfAnnotationRendererService {
       switch (annotation.type) {
         case "text":
         case "date":
-          this.drawText(
-            page,
-            annotation.value,
-            rect,
-            font,
-            style,
-            opacity,
-          );
+          this.drawText(page, annotation.value, rect, font, style, opacity);
           break;
 
         case "checkbox":
@@ -154,7 +154,7 @@ export class PdfAnnotationRendererService {
         case "signature":
           await this.signatureService.draw(
             page,
-            annotation.value ?? "",
+            annotation.value!,
             rect,
             opacity,
           );
@@ -173,31 +173,27 @@ export class PdfAnnotationRendererService {
     style: Annotation["style"],
     opacity: number,
   ): void {
-    const fontSize = Math.max(
-      1,
-      (style.fontSize ?? 16) * 0.75,
-    );
+    const fontSize = Math.max(1, (style.fontSize ?? 16) * 0.75);
 
-    const padding = 2;
+    // Editor uses px-1 (4 CSS pixels).
+    // PDF export operates at 72 points per inch.
+    const padding = 3;
+
     const maxWidth = Math.max(1, rect.width - padding * 2);
     const lineHeight = fontSize * 1.2;
 
-    const lines = this.wrapText(
-      value,
-      font,
-      fontSize,
-      maxWidth,
+    const lines = this.wrapText(value, font, fontSize, maxWidth);
+
+    const visibleLines = lines.slice(
+      0,
+      Math.max(1, Math.floor((rect.height - padding * 2) / lineHeight)),
     );
 
-    let currentY = rect.y + rect.height - fontSize - padding;
+    const totalHeight = visibleLines.length * lineHeight;
+    let currentY = rect.y + (rect.height + totalHeight) / 2 - fontSize;
 
-    for (const line of lines) {
-      if (currentY < rect.y) break;
-
-      const textWidth = font.widthOfTextAtSize(
-        line,
-        fontSize,
-      );
+    for (const line of visibleLines) {
+      const textWidth = font.widthOfTextAtSize(line, fontSize);
 
       let textX = rect.x + padding;
 
@@ -212,7 +208,9 @@ export class PdfAnnotationRendererService {
         y: currentY,
         size: fontSize,
         font,
-        color: this.parseColor(style.color ?? "#111827"),
+        color:
+          this.parseColor(style.color ?? "#111827") ??
+          rgb(17 / 255, 24 / 255, 39 / 255),
         opacity,
       });
 
@@ -241,7 +239,9 @@ export class PdfAnnotationRendererService {
         y: inset,
       },
       thickness: Math.max(1, rect.width * 0.07),
-      color: this.parseColor(style.color ?? "#111827"),
+      color:
+        this.parseColor(style.color ?? "#111827") ??
+        rgb(17 / 255, 24 / 255, 39 / 255),
       opacity,
     });
 
@@ -255,7 +255,9 @@ export class PdfAnnotationRendererService {
         y: rect.height - inset,
       },
       thickness: Math.max(1, rect.width * 0.07),
-      color: this.parseColor(style.color ?? "#111827"),
+      color:
+        this.parseColor(style.color ?? "#111827") ??
+        rgb(17 / 255, 24 / 255, 39 / 255),
       opacity,
     });
   }
@@ -276,10 +278,7 @@ export class PdfAnnotationRendererService {
       for (const word of words) {
         const candidate = line ? `${line} ${word}` : word;
 
-        if (
-          line &&
-          font.widthOfTextAtSize(candidate, fontSize) > maxWidth
-        ) {
+        if (line && font.widthOfTextAtSize(candidate, fontSize) > maxWidth) {
           lines.push(line);
           line = word;
         } else {
@@ -293,11 +292,11 @@ export class PdfAnnotationRendererService {
     return lines;
   }
 
-  private parseColor(value: string) {
-    const hex = value.replace("#", "");
+  private parseColor(value: string): ReturnType<typeof rgb> | null {
+    const hex = value.trim().replace(/^#/, "");
 
     if (!/^[0-9a-f]{6}$/i.test(hex)) {
-      return rgb(0, 0, 0);
+      return null;
     }
 
     return rgb(
