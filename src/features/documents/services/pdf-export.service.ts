@@ -18,34 +18,23 @@ import type { HandwritingProfile } from "@/features/handwriting/domain/handwriti
 import { getHandwritingFontFamily } from "@/features/handwriting/services/handwriting-font-loader.service";
 import { DocumentWorkspace } from "./document-workspace.types";
 import { pdfjsLib } from "@/engines/pdf/pdfjs.client";
+import { PdfFontService } from "./pdf-font.service";
+import { PdfSignatureService } from "./pdf-signature.service";
 
-type PdfFont = Awaited<ReturnType<PDFDocument["embedFont"]>>;
-
-export interface ExportOptions {
-  filename?: string;
-  validateRequired?: boolean;
-
-  /** Omit to export the entire document. */
-  pageIds?: PageId[];
-}
-
-interface ExportResult {
-  blob: Blob;
-  filename: string;
-}
-
-interface ViewportGeometry {
-  width: number;
-  height: number;
-  transform: number[];
-  rotation: 0 | 90 | 180 | 270;
-}
+import type { PdfFont } from "./pdf-font.service";
+import type {
+  ExportOptions,
+  ExportResult,
+  ViewportGeometry,
+} from "../domain/export.types";
 
 export class PdfExportService {
   constructor(
     private readonly documents: DocumentLoaderService,
     private readonly annotations: AnnotationRepository,
     private readonly handwritingProfiles: HandwritingProfileRepository,
+    private readonly fontService = new PdfFontService();
+    private readonly signatureService = new PdfSignatureService();
   ) {}
 
   async export(
@@ -145,7 +134,7 @@ export class PdfExportService {
 
     const fontCache = new Map<string, PdfFont>();
 
-    const standardFont = await pdf.embedFont(StandardFonts.Helvetica);
+const standardFonts = await this.fontService.loadStandardFonts(pdf);
     const boldFont = await pdf.embedFont(StandardFonts.HelveticaBold);
 
     for (const annotation of annotations) {
@@ -158,14 +147,13 @@ export class PdfExportService {
         );
       }
 
-      const font = await this.resolveFont(
-        annotation,
-        profiles,
-        pdf,
-        fontCache,
-        standardFont,
-        boldFont,
-      );
+      const font = await this.fontService.resolve(
+  annotation,
+  profiles,
+  pdf,
+  fontCache,
+  standardFonts,
+); 
 
       await this.renderAnnotation(page, annotation, font, viewport);
     }
@@ -206,58 +194,6 @@ export class PdfExportService {
         `${missing.length} required field(s) have not been completed.`,
       );
     }
-  }
-
-  private async resolveFont(
-    annotation: Annotation,
-    profiles: HandwritingProfile[],
-    pdf: PDFDocument,
-    cache: Map<string, PdfFont>,
-    regular: PdfFont,
-    bold: PdfFont,
-  ): Promise<PdfFont> {
-    if (annotation.type !== "text" && annotation.type !== "date") {
-      return regular;
-    }
-
-    const family = annotation.style.fontFamily ?? "";
-
-    if (family.startsWith("KreativHandwriting-")) {
-      const profileId = family.replace("KreativHandwriting-", "");
-
-      const profile = profiles.find(
-        (item) =>
-          getHandwritingFontFamily(item.id) === family &&
-          item.status === "ready",
-      );
-
-      if (!profile?.fontBlob) {
-        throw new Error(
-          `The handwriting font "${family}" could not be found or has no generated font data.`,
-        );
-      }
-
-      const cached = cache.get(profile.id);
-
-      if (cached) return cached;
-
-      const fontBytes = new Uint8Array(await profile.fontBlob.arrayBuffer());
-
-      try {
-        const embedded = await pdf.embedFont(fontBytes, {
-          subset: false,
-        });
-
-        cache.set(profile.id, embedded);
-
-        return embedded;
-      } catch (error) {
-        console.error("Custom PDF font embedding failed:", error);
-        throw error;
-      }
-    }
-
-    return annotation.style.fontWeight === "bold" ? bold : regular;
   }
 
   private async renderAnnotation(
@@ -420,14 +356,14 @@ export class PdfExportService {
         }
 
         case "signature": {
-          await this.drawSignature(
-            page,
-            annotation.value ?? "",
-            viewportRect,
-            opacity,
-          );
-          break;
-        }
+  await this.signatureService.draw(
+    page,
+    annotation.value ?? "",
+    viewportRect,
+    opacity,
+  );
+  break;
+}
       }
     } finally {
       page.pushOperators(popGraphicsState());
@@ -505,52 +441,6 @@ export class PdfExportService {
     }
 
     return lines;
-  }
-
-  private async drawSignature(
-    page: ReturnType<PDFDocument["getPages"]>[number],
-    dataUrl: string,
-    rect: { x: number; y: number; width: number; height: number },
-    opacity: number,
-  ) {
-    const { bytes, mimeType } = this.decodeDataUrl(dataUrl);
-
-    const image =
-      mimeType === "image/png"
-        ? await page.doc.embedPng(bytes)
-        : await page.doc.embedJpg(bytes);
-
-    const dimensions = image.scaleToFit(rect.width, rect.height);
-
-    page.drawImage(image, {
-      x: rect.x + (rect.width - dimensions.width) / 2,
-      y: rect.y + (rect.height - dimensions.height) / 2,
-      width: dimensions.width,
-      height: dimensions.height,
-      opacity,
-    });
-  }
-
-  private decodeDataUrl(dataUrl: string) {
-    const match = dataUrl.match(
-      /^data:(image\/(?:png|jpeg|jpg));base64,(.+)$/i,
-    );
-
-    if (!match) {
-      throw new Error("Unsupported signature image format.");
-    }
-
-    const binary = atob(match[2]);
-    const bytes = new Uint8Array(binary.length);
-
-    for (let index = 0; index < binary.length; index++) {
-      bytes[index] = binary.charCodeAt(index);
-    }
-
-    return {
-      bytes,
-      mimeType: match[1].toLowerCase(),
-    };
   }
 
   private async getViewportGeometries(
