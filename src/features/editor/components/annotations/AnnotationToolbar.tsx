@@ -10,8 +10,13 @@ import {
   SlidersHorizontal,
   Trash2,
   Type,
+  MousePointer2,
+  Move,
+  Maximize2,
+  RotateCw,
 } from "lucide-react";
 
+import type { InteractionMode } from "../../domain/annotation-interaction.types";
 import type { Annotation } from "../../domain/annotation.types";
 import {
   TYPE_OPTIONS,
@@ -27,18 +32,17 @@ const TYPE_ICONS: Record<AnnotationType, typeof Type> = {
   checkbox: CheckSquare,
   signature: PenLine,
 };
+const INTERACTION_MODES = [
+  { mode: "select", label: "Select", shortcut: "V", icon: MousePointer2 },
+  { mode: "move", label: "Move", shortcut: "M", icon: Move },
+  { mode: "resize", label: "Resize", shortcut: "S", icon: Maximize2 },
+  { mode: "rotate", label: "Rotate", shortcut: "R", icon: RotateCw },
+] as const;
 
-export function AnnotationToolbar({
-  annotation,
-  canChangeType,
-  canDelete,
-  onChangeType,
-  onStyleChange,
-  onDelete,
-  onSign,
-  onDone,
-}: {
+interface AnnotationToolbarProps {
   annotation: Annotation;
+  interactionMode: InteractionMode;
+  onInteractionModeChange: (mode: InteractionMode) => void;
   canChangeType: boolean;
   canDelete: boolean;
   onChangeType: (type: AnnotationType) => void;
@@ -46,7 +50,20 @@ export function AnnotationToolbar({
   onDelete: () => void;
   onSign: () => void;
   onDone: () => void;
-}) {
+}
+
+export function AnnotationToolbar({
+  annotation,
+  interactionMode,
+  onInteractionModeChange,
+  canChangeType,
+  canDelete,
+  onChangeType,
+  onStyleChange,
+  onDelete,
+  onSign,
+  onDone,
+}: AnnotationToolbarProps) {
   const [showStyle, setShowStyle] = useState(false);
 
   const beginHistoryGroup = useAnnotationStore(
@@ -106,6 +123,39 @@ export function AnnotationToolbar({
           </div>
         </div>
       )}
+
+{/* Touch interaction modes */}
+<div
+  role="group"
+  aria-label="Annotation interaction mode"
+  className="
+    pointer-events-auto flex items-center gap-1
+    rounded-xl border border-border
+    bg-background/95 p-1.5
+    shadow-lg backdrop-blur-xl
+    pointer-coarse:flex hidden
+  "
+>
+  {INTERACTION_MODES.map(({ mode, label, icon: Icon }) => {
+    const active = interactionMode === mode;
+
+    return (
+      <Button
+        key={mode}
+        type="button"
+        size="sm"
+        variant={active ? "solid" : "soft"}
+        color={active ? "brand" : "neutral"}
+        aria-label={label}
+        aria-pressed={active}
+        onClick={() => onInteractionModeChange(mode)}
+      >
+        <Icon size={15} />
+        <span>{label}</span>
+      </Button>
+    );
+  })}
+</div>
 
       {/* Main toolbar */}
       <div
